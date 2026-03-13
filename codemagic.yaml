@@ -25,7 +25,7 @@ workflows:
     publishing:
       email:
         recipients:
-          - dein@email.ch  # <-- Ersetze mit deiner E-Mail
+          - noe.gloor@soleco.ch  # <-- Ersetze mit deiner E-Mail
         notify:
           success: true
           failure: true
