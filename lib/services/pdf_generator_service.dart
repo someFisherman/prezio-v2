@@ -17,7 +17,7 @@ class PdfGeneratorService {
         build: (context) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
-            _buildHeader(data),
+            _buildHeader(),
             pw.SizedBox(height: 30),
             _buildLocationDate(data),
             pw.SizedBox(height: 30),
@@ -29,7 +29,7 @@ class PdfGeneratorService {
             pw.SizedBox(height: 20),
             _buildPressureInfo(data),
             pw.SizedBox(height: 20),
-            _buildTestTypes(data),
+            _buildTestType(),
             pw.SizedBox(height: 30),
             _buildResult(data),
             pw.SizedBox(height: 30),
@@ -53,7 +53,7 @@ class PdfGeneratorService {
     return file.path;
   }
 
-  pw.Widget _buildHeader(ProtocolData data) {
+  pw.Widget _buildHeader() {
     return pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
       crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -62,7 +62,7 @@ class PdfGeneratorService {
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
             pw.Text(
-              'SOLECO',
+              'LEHMANN 2000',
               style: pw.TextStyle(
                 fontSize: 28,
                 fontWeight: pw.FontWeight.bold,
@@ -70,7 +70,7 @@ class PdfGeneratorService {
               ),
             ),
             pw.Text(
-              'Ihr Partner für Wärmetechnik',
+              'Ihr Partner fuer Waermetechnik',
               style: pw.TextStyle(
                 fontSize: 12,
                 fontStyle: pw.FontStyle.italic,
@@ -87,20 +87,14 @@ class PdfGeneratorService {
     final date = Formatters.formatDate(data.measurement.startTime);
     return pw.Text(
       'Zofingen / $date',
-      style: const pw.TextStyle(
-        fontSize: 11,
-        color: PdfColors.blue800,
-      ),
+      style: const pw.TextStyle(fontSize: 11, color: PdfColors.blue800),
     );
   }
 
   pw.Widget _buildTitle() {
     return pw.Text(
       'Druckprotokoll',
-      style: pw.TextStyle(
-        fontSize: 22,
-        fontWeight: pw.FontWeight.bold,
-      ),
+      style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold),
     );
   }
 
@@ -126,10 +120,7 @@ class PdfGeneratorService {
         children: [
           pw.TextSpan(
             text: '$label ',
-            style: pw.TextStyle(
-              fontSize: 11,
-              fontWeight: pw.FontWeight.bold,
-            ),
+            style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
           ),
           pw.TextSpan(
             text: value.isNotEmpty ? value : '-',
@@ -144,15 +135,9 @@ class PdfGeneratorService {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text(
-          'Sehr geehrte Damen und Herren',
-          style: const pw.TextStyle(fontSize: 11),
-        ),
+        pw.Text('Sehr geehrte Damen und Herren', style: const pw.TextStyle(fontSize: 11)),
         pw.SizedBox(height: 4),
-        pw.Text(
-          'Anbei erhalten Sie unser Druckprotokoll',
-          style: const pw.TextStyle(fontSize: 11),
-        ),
+        pw.Text('Anbei erhalten Sie unser Druckprotokoll', style: const pw.TextStyle(fontSize: 11)),
       ],
     );
   }
@@ -165,11 +150,10 @@ class PdfGeneratorService {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        _buildInfoRow('Betriebsdruck:', 
-            data.nominalPressure > 0 ? 'PN ${data.nominalPressure}' : '-'),
-        _buildInfoRow('Druckprüfung:', data.testMedium.displayName),
-        _buildInfoRow('Prüfdruck:', Formatters.formatPressureWithUnit(data.testPressure)),
-        _buildInfoRow('Prüfdauer:', testDuration),
+        _buildInfoRow('Betriebsdruck:', data.nominalPressure > 0 ? 'PN ${data.nominalPressure}' : '-'),
+        _buildInfoRow('Druckpruefung:', data.testMedium.displayName),
+        _buildInfoRow('Pruefdruck:', Formatters.formatPressureWithUnit(data.testPressure)),
+        _buildInfoRow('Pruefdauer:', testDuration),
       ],
     );
   }
@@ -182,96 +166,42 @@ class PdfGeneratorService {
         children: [
           pw.SizedBox(
             width: 120,
-            child: pw.Text(
-              label,
-              style: const pw.TextStyle(fontSize: 11),
-            ),
+            child: pw.Text(label, style: const pw.TextStyle(fontSize: 11)),
           ),
           pw.Expanded(
-            child: pw.Text(
-              value,
-              style: const pw.TextStyle(fontSize: 11),
-            ),
+            child: pw.Text(value, style: const pw.TextStyle(fontSize: 11)),
           ),
         ],
       ),
     );
   }
 
-  pw.Widget _buildTestTypes(ProtocolData data) {
-    return pw.Column(
+  pw.Widget _buildTestType() {
+    return pw.Row(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Row(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            pw.SizedBox(
-              width: 120,
-              child: pw.Text(
-                'Prüfart:',
-                style: const pw.TextStyle(fontSize: 11),
-              ),
-            ),
-            pw.Column(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                _buildTestTypeItem('optisch', data.testTypes.contains(TestType.optical)),
-                pw.SizedBox(height: 6),
-                _buildTestTypeItem('Lecksuchspray', data.testTypes.contains(TestType.leakSpray)),
-                pw.SizedBox(height: 6),
-                _buildTestTypeItem('Röntgenprüfung', data.testTypes.contains(TestType.xray)),
-                pw.SizedBox(height: 6),
-                _buildTestTypeItem('Vakuumtest', data.testTypes.contains(TestType.vacuum)),
-              ],
-            ),
-          ],
+        pw.SizedBox(
+          width: 120,
+          child: pw.Text('Pruefart:', style: const pw.TextStyle(fontSize: 11)),
         ),
-      ],
-    );
-  }
-
-  pw.Widget _buildTestTypeItem(String label, bool selected) {
-    return pw.Row(
-      children: [
-        pw.Container(
-          width: 8,
-          height: 8,
-          margin: const pw.EdgeInsets.only(right: 8),
-          decoration: pw.BoxDecoration(
-            shape: pw.BoxShape.circle,
-            color: selected ? PdfColors.black : PdfColors.white,
-            border: pw.Border.all(color: PdfColors.black, width: 0.5),
-          ),
-        ),
-        pw.Text(
-          label,
-          style: const pw.TextStyle(fontSize: 11),
-        ),
+        pw.Text('Manometer', style: const pw.TextStyle(fontSize: 11)),
       ],
     );
   }
 
   pw.Widget _buildResult(ProtocolData data) {
-    final resultText = data.result.isNotEmpty 
-        ? data.result 
-        : (data.passed ? 'OK' : 'Nicht OK');
+    final resultText = data.passed ? 'OK' : 'Nicht OK';
 
     return pw.Row(
       children: [
         pw.Text(
           'Resultat:',
-          style: pw.TextStyle(
-            fontSize: 11,
-            fontWeight: pw.FontWeight.bold,
-          ),
+          style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
         ),
         pw.SizedBox(width: 70),
         pw.Text(
           resultText,
-          style: pw.TextStyle(
-            fontSize: 11,
-            fontWeight: pw.FontWeight.bold,
-          ),
+          style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
         ),
       ],
     );
@@ -283,18 +213,11 @@ class PdfGeneratorService {
       children: [
         pw.Text(
           'Druckverlauf:',
-          style: pw.TextStyle(
-            fontSize: 11,
-            fontWeight: pw.FontWeight.bold,
-          ),
+          style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
         ),
         pw.SizedBox(height: 10),
         pw.Center(
-          child: pw.Image(
-            pw.MemoryImage(chartImage),
-            width: 400,
-            height: 180,
-          ),
+          child: pw.Image(pw.MemoryImage(chartImage), width: 400, height: 180),
         ),
       ],
     );
@@ -311,24 +234,15 @@ class PdfGeneratorService {
         pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
-            pw.Text(
-              'Datum $dateStr, Unterschrift',
-              style: const pw.TextStyle(fontSize: 11),
-            ),
+            pw.Text('Datum $dateStr, Unterschrift', style: const pw.TextStyle(fontSize: 11)),
             pw.SizedBox(height: 5),
             if (data.signature != null)
-              pw.Image(
-                pw.MemoryImage(data.signature!),
-                width: 150,
-                height: 50,
-              )
+              pw.Image(pw.MemoryImage(data.signature!), width: 150, height: 50)
             else
               pw.Container(
                 width: 200,
                 decoration: const pw.BoxDecoration(
-                  border: pw.Border(
-                    bottom: pw.BorderSide(color: PdfColors.black, width: 0.5),
-                  ),
+                  border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5)),
                 ),
                 child: pw.SizedBox(height: 40),
               ),
@@ -342,41 +256,34 @@ class PdfGeneratorService {
     return pw.Container(
       padding: const pw.EdgeInsets.only(top: 10),
       decoration: const pw.BoxDecoration(
-        border: pw.Border(
-          top: pw.BorderSide(color: PdfColors.grey300, width: 0.5),
-        ),
+        border: pw.Border(top: pw.BorderSide(color: PdfColors.grey300, width: 0.5)),
       ),
-      child: pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+      child: pw.Column(
         children: [
-          pw.Expanded(
-            child: pw.RichText(
-              text: pw.TextSpan(
-                style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
-                children: [
-                  const pw.TextSpan(text: 'SOLECO AG '),
-                  pw.TextSpan(
-                    text: '|',
-                    style: pw.TextStyle(color: PdfColors.red700),
-                  ),
-                  const pw.TextSpan(text: ' Adresse '),
-                  pw.TextSpan(
-                    text: '|',
-                    style: pw.TextStyle(color: PdfColors.red700),
-                  ),
-                  const pw.TextSpan(text: ' PLZ Ort '),
-                  pw.TextSpan(
-                    text: '|',
-                    style: pw.TextStyle(color: PdfColors.red700),
-                  ),
-                  const pw.TextSpan(text: ' info@soleco.ch'),
-                ],
-              ),
+          pw.RichText(
+            text: pw.TextSpan(
+              style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+              children: [
+                const pw.TextSpan(text: 'LEHMANN 2000 AG '),
+                pw.TextSpan(text: '|', style: pw.TextStyle(color: PdfColors.red700)),
+                const pw.TextSpan(text: ' Muellerweg 5 '),
+                pw.TextSpan(text: '|', style: pw.TextStyle(color: PdfColors.red700)),
+                const pw.TextSpan(text: ' 4800 Zofingen '),
+                pw.TextSpan(text: '|', style: pw.TextStyle(color: PdfColors.red700)),
+                const pw.TextSpan(text: ' +41 62 745 30 30'),
+              ],
             ),
           ),
-          pw.Text(
-            'Seite 1',
-            style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+          pw.SizedBox(height: 2),
+          pw.RichText(
+            text: pw.TextSpan(
+              style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
+              children: [
+                const pw.TextSpan(text: 'info@lehmann2000.ch '),
+                pw.TextSpan(text: '|', style: pw.TextStyle(color: PdfColors.red700)),
+                const pw.TextSpan(text: ' CHE-108.359.764 MWST'),
+              ],
+            ),
           ),
         ],
       ),

@@ -89,7 +89,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           labelText: 'IP-Adresse',
                           hintText: '192.168.4.1',
                         ),
-                        keyboardType: TextInputType.number,
+                        keyboardType: TextInputType.url,
                       ),
                       const SizedBox(height: 12),
                       TextField(
@@ -99,12 +99,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           hintText: '8080',
                         ),
                         keyboardType: TextInputType.number,
-                      ),
-                      const SizedBox(height: 16),
-                      OutlinedButton.icon(
-                        onPressed: _testConnection,
-                        icon: const Icon(Icons.network_check),
-                        label: const Text('Verbindung testen'),
                       ),
                     ],
                   ),
@@ -134,12 +128,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               children: [
                 Icon(icon, color: Theme.of(context).colorScheme.primary),
                 const SizedBox(width: 8),
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                      ),
-                ),
+                Text(title,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
               ],
             ),
             const SizedBox(height: 16),
@@ -181,34 +171,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         const SnackBar(content: Text('Einstellungen gespeichert')),
       );
       Navigator.pop(context);
-    }
-  }
-
-  Future<void> _testConnection() async {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) => const Center(child: CircularProgressIndicator()),
-    );
-
-    final measurementService = ref.read(measurementServiceProvider);
-    measurementService.updatePiConnection(
-      _addressController.text,
-      int.tryParse(_portController.text) ?? AppConstants.defaultPiPort,
-    );
-    
-    final connected = await measurementService.checkPiConnection();
-
-    if (mounted) {
-      Navigator.pop(context);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(connected 
-              ? 'Verbindung erfolgreich!' 
-              : 'Keine Verbindung zum Pi'),
-          backgroundColor: connected ? Colors.green : Colors.red,
-        ),
-      );
     }
   }
 }

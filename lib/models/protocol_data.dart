@@ -1,32 +1,9 @@
 import 'dart:typed_data';
 import 'measurement.dart';
 
-enum TestType {
-  optical,
-  leakSpray,
-  xray,
-  vacuum,
-}
-
-extension TestTypeExtension on TestType {
-  String get displayName {
-    switch (this) {
-      case TestType.optical:
-        return 'Optisch';
-      case TestType.leakSpray:
-        return 'Lecksuchspray';
-      case TestType.xray:
-        return 'Röntgenprüfung';
-      case TestType.vacuum:
-        return 'Vakuumtest';
-    }
-  }
-}
-
 enum TestMedium {
   air,
   water,
-  nitrogen,
 }
 
 extension TestMediumExtension on TestMedium {
@@ -36,8 +13,15 @@ extension TestMediumExtension on TestMedium {
         return 'Luft';
       case TestMedium.water:
         return 'Wasser';
-      case TestMedium.nitrogen:
-        return 'Stickstoff';
+    }
+  }
+
+  double testPressureFactor() {
+    switch (this) {
+      case TestMedium.air:
+        return 1.1;
+      case TestMedium.water:
+        return 1.5;
     }
   }
 }
@@ -54,8 +38,6 @@ class ProtocolData {
   final double testPressure;
   final String testDuration;
   
-  final List<TestType> testTypes;
-  
   final String result;
   final bool passed;
   
@@ -66,6 +48,7 @@ class ProtocolData {
   final Uint8List? chartImage;
   
   final String? notes;
+  final String? validationReason;
 
   const ProtocolData({
     required this.measurement,
@@ -76,7 +59,6 @@ class ProtocolData {
     this.testMedium = TestMedium.air,
     this.testPressure = 0.0,
     this.testDuration = '',
-    this.testTypes = const [],
     this.result = '',
     this.passed = false,
     this.technicianName = '',
@@ -84,6 +66,7 @@ class ProtocolData {
     this.signatureDate,
     this.chartImage,
     this.notes,
+    this.validationReason,
   });
 
   ProtocolData copyWith({
@@ -95,7 +78,6 @@ class ProtocolData {
     TestMedium? testMedium,
     double? testPressure,
     String? testDuration,
-    List<TestType>? testTypes,
     String? result,
     bool? passed,
     String? technicianName,
@@ -103,6 +85,7 @@ class ProtocolData {
     DateTime? signatureDate,
     Uint8List? chartImage,
     String? notes,
+    String? validationReason,
   }) {
     return ProtocolData(
       measurement: measurement ?? this.measurement,
@@ -113,7 +96,6 @@ class ProtocolData {
       testMedium: testMedium ?? this.testMedium,
       testPressure: testPressure ?? this.testPressure,
       testDuration: testDuration ?? this.testDuration,
-      testTypes: testTypes ?? this.testTypes,
       result: result ?? this.result,
       passed: passed ?? this.passed,
       technicianName: technicianName ?? this.technicianName,
@@ -121,6 +103,7 @@ class ProtocolData {
       signatureDate: signatureDate ?? this.signatureDate,
       chartImage: chartImage ?? this.chartImage,
       notes: notes ?? this.notes,
+      validationReason: validationReason ?? this.validationReason,
     );
   }
 }

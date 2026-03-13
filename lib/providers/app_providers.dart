@@ -18,6 +18,10 @@ final emailServiceProvider = Provider<EmailService>((ref) {
   return EmailService();
 });
 
+final validationServiceProvider = Provider<ValidationService>((ref) {
+  return ValidationService();
+});
+
 final measurementsProvider = StateNotifierProvider<MeasurementsNotifier, List<Measurement>>((ref) {
   final service = ref.watch(measurementServiceProvider);
   return MeasurementsNotifier(service);
@@ -28,22 +32,8 @@ class MeasurementsNotifier extends StateNotifier<List<Measurement>> {
 
   MeasurementsNotifier(this._service) : super([]);
 
-  Future<int> loadFromFiles() async {
-    final count = await _service.loadMultipleFromFiles();
-    state = _service.allMeasurements;
-    return count;
-  }
-
-  Future<Measurement?> loadSingleFile() async {
-    final measurement = await _service.loadFromFile();
-    state = _service.allMeasurements;
-    return measurement;
-  }
-
-  Future<int> loadFromPi() async {
-    final count = await _service.loadFromPi();
-    state = _service.allMeasurements;
-    return count;
+  void refresh() {
+    state = [..._service.allMeasurements];
   }
 
   void setValidationStatus(String id, ValidationStatus status, {String? reason}) {
@@ -65,16 +55,8 @@ class MeasurementsNotifier extends StateNotifier<List<Measurement>> {
     _service.clearAll();
     state = [];
   }
-
-  List<Measurement> get validMeasurements => _service.validMeasurements;
-  List<Measurement> get invalidMeasurements => _service.invalidMeasurements;
-  List<Measurement> get pendingMeasurements => _service.pendingMeasurements;
 }
 
 final selectedMeasurementProvider = StateProvider<Measurement?>((ref) => null);
 
 final protocolDataProvider = StateProvider<ProtocolData?>((ref) => null);
-
-final connectionStatusProvider = StateProvider<bool>((ref) => false);
-
-final isLoadingProvider = StateProvider<bool>((ref) => false);
