@@ -1,0 +1,124 @@
+workflows:
+  # ==========================================
+  # Android APK Build (ohne Signierung)
+  # ==========================================
+  android-build:
+    name: Android Build
+    max_build_duration: 30
+    instance_type: mac_mini_m2
+    environment:
+      flutter: stable
+      java: 17
+    scripts:
+      - name: Get Flutter packages
+        script: flutter pub get
+      
+      - name: Build APK (Debug)
+        script: flutter build apk --debug
+      
+      - name: Build APK (Release - unsigned)
+        script: flutter build apk --release
+    
+    artifacts:
+      - build/app/outputs/flutter-apk/*.apk
+    
+    publishing:
+      email:
+        recipients:
+          - dein@email.ch  # <-- Ersetze mit deiner E-Mail
+        notify:
+          success: true
+          failure: true
+
+  # ==========================================
+  # iOS Build (ohne Signierung - für Sideloadly)
+  # ==========================================
+  ios-build-unsigned:
+    name: iOS Build (Unsigned)
+    max_build_duration: 30
+    instance_type: mac_mini_m2
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+    scripts:
+      - name: Get Flutter packages
+        script: flutter pub get
+      
+      - name: Install CocoaPods dependencies
+        script: |
+          cd ios
+          pod install
+      
+      - name: Build iOS (unsigned)
+        script: |
+          flutter build ios --release --no-codesign
+      
+      - name: Create unsigned IPA
+        script: |
+          cd build/ios/iphoneos
+          mkdir -p Payload
+          cp -r Runner.app Payload/
+          zip -r prezio_unsigned.ipa Payload
+          mv prezio_unsigned.ipa ../../../
+    
+    artifacts:
+      - "*.ipa"
+      - build/ios/iphoneos/Runner.app
+    
+    publishing:
+      email:
+        recipients:
+          - dein@email.ch  # <-- Ersetze mit deiner E-Mail
+        notify:
+          success: true
+          failure: true
+
+  # ==========================================
+  # Beide Plattformen zusammen
+  # ==========================================
+  build-all:
+    name: Build All (Android + iOS)
+    max_build_duration: 45
+    instance_type: mac_mini_m2
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      java: 17
+    scripts:
+      - name: Get Flutter packages
+        script: flutter pub get
+      
+      # Android
+      - name: Build Android APK
+        script: flutter build apk --release
+      
+      # iOS
+      - name: Install CocoaPods
+        script: |
+          cd ios
+          pod install
+      
+      - name: Build iOS (unsigned)
+        script: flutter build ios --release --no-codesign
+      
+      - name: Create unsigned IPA
+        script: |
+          cd build/ios/iphoneos
+          mkdir -p Payload
+          cp -r Runner.app Payload/
+          zip -r prezio_unsigned.ipa Payload
+          mv prezio_unsigned.ipa ../../../
+    
+    artifacts:
+      - build/app/outputs/flutter-apk/*.apk
+      - "*.ipa"
+    
+    publishing:
+      email:
+        recipients:
+          - dein@email.ch  # <-- Ersetze mit deiner E-Mail
+        notify:
+          success: true
+          failure: true

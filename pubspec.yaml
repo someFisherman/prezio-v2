@@ -1,0 +1,58 @@
+name: prezio_v2
+description: "Prezio - Druckprotokoll App für iOS und Android"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.9.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  
+  # State Management
+  flutter_riverpod: ^2.6.1
+  riverpod_annotation: ^2.6.1
+  
+  # HTTP & Networking
+  http: ^1.4.0
+  
+  # Charts
+  fl_chart: ^1.0.0
+  
+  # PDF Generation
+  pdf: ^3.11.3
+  printing: ^5.13.5
+  
+  # Signature Capture
+  signature: ^5.5.0
+  
+  # Email
+  flutter_email_sender: ^6.0.3
+  
+  # File & Path
+  path_provider: ^2.1.5
+  share_plus: ^10.1.4
+  file_picker: ^8.1.7
+  
+  # Local Storage
+  shared_preferences: ^2.5.3
+  
+  # Utils
+  intl: ^0.20.2
+  uuid: ^4.5.1
+  csv: ^6.0.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+  riverpod_generator: ^2.6.5
+  build_runner: ^2.4.15
+
+flutter:
+  uses-material-design: true
+  
+  assets:
+    - assets/images/
