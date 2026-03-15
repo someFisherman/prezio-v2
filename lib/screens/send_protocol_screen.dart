@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/models.dart';
 import '../providers/providers.dart';
+import '../services/google_drive_service.dart';
 import '../utils/formatters.dart';
 
 class SendProtocolScreen extends ConsumerStatefulWidget {
@@ -54,26 +55,45 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
 
       setState(() => _localSaved = true);
 
-      // Upload to Google Drive
-      final driveService = ref.read(googleDriveServiceProvider);
-      if (driveService.isSignedIn) {
-        final folderName = localResult.folderPath.split('/').last.split('\\').last;
-        final metadataJson = _buildMetadataJson(widget.protocolData, csvContent);
+      // Try Google Drive upload (best-effort, never blocks the app)
+      try {
+        final driveService = ref.read(googleDriveServiceProvider);
 
-        final uploadResult = await driveService.uploadProtocol(
-          folderName: folderName,
-          pdfPath: pdfPath,
-          csvContent: csvContent,
-          metadataJson: metadataJson,
-        );
-
-        if (uploadResult.success) {
-          setState(() => _cloudUploaded = true);
-        } else {
-          setState(() => _cloudError = uploadResult.error ?? 'Upload fehlgeschlagen');
+        // Try silent sign-in if not already signed in (with timeout)
+        if (!driveService.isSignedIn) {
+          await driveService.trySilentSignIn().timeout(
+            const Duration(seconds: 8),
+            onTimeout: () => false,
+          );
         }
-      } else {
-        setState(() => _cloudError = 'Nicht mit Google angemeldet');
+
+        if (driveService.isSignedIn) {
+          final folderName = localResult.folderPath.split('/').last.split('\\').last;
+          final metadataJson = _buildMetadataJson(widget.protocolData, csvContent);
+
+          final uploadResult = await driveService.uploadProtocol(
+            folderName: folderName,
+            pdfPath: pdfPath,
+            csvContent: csvContent,
+            metadataJson: metadataJson,
+          ).timeout(
+            const Duration(seconds: 30),
+            onTimeout: () => const GoogleDriveUploadResult(
+              success: false,
+              error: 'Upload Timeout',
+            ),
+          );
+
+          if (uploadResult.success) {
+            setState(() => _cloudUploaded = true);
+          } else {
+            setState(() => _cloudError = uploadResult.error ?? 'Upload fehlgeschlagen');
+          }
+        } else {
+          setState(() => _cloudError = 'Google nicht verbunden (in Einstellungen anmelden)');
+        }
+      } catch (_) {
+        setState(() => _cloudError = 'Google Drive nicht erreichbar');
       }
     } catch (e) {
       setState(() => _error = e.toString());

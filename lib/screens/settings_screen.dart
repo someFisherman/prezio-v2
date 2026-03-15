@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/providers.dart';
 import '../utils/constants.dart';
-import 'login_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -16,6 +15,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late TextEditingController _addressController;
   late TextEditingController _portController;
   bool _isLoading = true;
+  bool _googleLoggingIn = false;
 
   @override
   void initState() {
@@ -46,15 +46,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     super.dispose();
   }
 
+  Future<void> _loginGoogle() async {
+    setState(() => _googleLoggingIn = true);
+    final driveService = ref.read(googleDriveServiceProvider);
+    final success = await driveService.signIn();
+    if (mounted) {
+      setState(() => _googleLoggingIn = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(success
+              ? 'Google Drive verbunden'
+              : 'Anmeldung fehlgeschlagen'),
+          backgroundColor: success ? Colors.green : Colors.red,
+        ),
+      );
+    }
+  }
+
   Future<void> _logoutGoogle() async {
     final driveService = ref.read(googleDriveServiceProvider);
     await driveService.signOut();
-
     if (mounted) {
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
-        (route) => false,
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Google Drive getrennt')),
       );
     }
   }
@@ -207,8 +222,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
             ] else ...[
               Text(
-                'Nicht angemeldet. Bitte App neu starten und sich mit Google anmelden.',
+                'Nicht angemeldet. Protokolle werden nur lokal gespeichert.',
                 style: TextStyle(color: Colors.grey[600], fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _googleLoggingIn ? null : _loginGoogle,
+                  icon: _googleLoggingIn
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.login),
+                  label: Text(_googleLoggingIn
+                      ? 'Anmeldung laeuft...'
+                      : 'Mit Google anmelden'),
+                ),
               ),
             ],
           ],
