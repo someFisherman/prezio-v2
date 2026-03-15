@@ -53,5 +53,7 @@
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Prezio benötigt den Standort um Wetterdaten für die Druckprüfung abzurufen.</string>
 </dict>
 </plist>

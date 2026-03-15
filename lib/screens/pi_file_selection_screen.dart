@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/providers.dart';
 import '../services/services.dart';
 import '../utils/formatters.dart';
-import 'measurement_list_screen.dart';
+import 'protocol_form_screen.dart';
 
 class PiFileSelectionScreen extends ConsumerStatefulWidget {
   const PiFileSelectionScreen({super.key});
@@ -17,7 +17,7 @@ class _PiFileSelectionScreenState extends ConsumerState<PiFileSelectionScreen> {
   bool _isLoading = false;
   String? _error;
   List<FileInfo> _files = [];
-  final Set<String> _selectedFiles = {};
+  String? _loadingFile;
 
   @override
   void initState() {
@@ -66,52 +66,79 @@ class _PiFileSelectionScreenState extends ConsumerState<PiFileSelectionScreen> {
     }
   }
 
+  String _extractName(String filename) {
+    // Format: messung_2026-03-15_15-00-53_Heizung_OG.csv
+    final withoutExt = filename.replaceAll('.csv', '');
+    final parts = withoutExt.split('_');
+    // Skip: messung, date (3 parts), time (3 parts) = first 7 parts
+    if (parts.length > 4) {
+      return parts.sublist(4).join(' ');
+    }
+    return filename;
+  }
+
+  Future<void> _loadAndNavigate(FileInfo file) async {
+    setState(() {
+      _isLoading = true;
+      _loadingFile = file.filename;
+    });
+
+    try {
+      final service = ref.read(measurementServiceProvider);
+      final measurement = await service.loadSingleFromPi(file);
+
+      if (measurement == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Messung konnte nicht geladen werden'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      ref.read(measurementsProvider.notifier).refresh();
+
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ProtocolFormScreen(measurement: measurement),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Fehler: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _loadingFile = null;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Messungen vom Pi'),
         actions: [
-          if (_files.isNotEmpty)
-            TextButton.icon(
-              onPressed: _toggleSelectAll,
-              icon: Icon(
-                _selectedFiles.length == _files.length
-                    ? Icons.deselect
-                    : Icons.select_all,
-              ),
-              label: Text(
-                _selectedFiles.length == _files.length ? 'Keine' : 'Alle',
-              ),
-            ),
+          IconButton(
+            onPressed: _isLoading ? null : _connectAndLoadFiles,
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Aktualisieren',
+          ),
         ],
       ),
       body: _buildBody(),
-      bottomNavigationBar: _files.isNotEmpty && _selectedFiles.isNotEmpty
-          ? SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: ElevatedButton.icon(
-                  onPressed: _isLoading ? null : _loadSelected,
-                  icon: _isLoading
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.download),
-                  label: Text(
-                    _isLoading
-                        ? 'Wird geladen...'
-                        : '${_selectedFiles.length} Messung(en) laden',
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                ),
-              ),
-            )
-          : null,
     );
   }
 
@@ -155,80 +182,51 @@ class _PiFileSelectionScreenState extends ConsumerState<PiFileSelectionScreen> {
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      itemCount: _files.length,
-      itemBuilder: (context, index) {
-        final file = _files[index];
-        final isSelected = _selectedFiles.contains(file.filename);
-
-        return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: CheckboxListTile(
-            value: isSelected,
-            onChanged: (value) {
-              setState(() {
-                if (value == true) {
-                  _selectedFiles.add(file.filename);
-                } else {
-                  _selectedFiles.remove(file.filename);
-                }
-              });
-            },
-            title: Text(
-              file.filename,
-              style: const TextStyle(fontWeight: FontWeight.w500),
-            ),
-            subtitle: Text(
-              '${(file.size / 1024).toStringAsFixed(1)} KB'
-              '${file.modified != null ? ' - ${Formatters.formatDateTime(file.modified!)}' : ''}',
-            ),
-            secondary: const Icon(Icons.insert_drive_file, color: Colors.blue),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Text(
+            'Messung antippen um Protokoll zu erstellen:',
+            style: TextStyle(color: Colors.grey[600]),
           ),
-        );
-      },
+        ),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            itemCount: _files.length,
+            itemBuilder: (context, index) {
+              final file = _files[index];
+              final name = _extractName(file.filename);
+              final isThisLoading = _loadingFile == file.filename;
+
+              return Card(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: ListTile(
+                  onTap: _isLoading ? null : () => _loadAndNavigate(file),
+                  leading: isThisLoading
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.insert_drive_file, color: Colors.blue),
+                  title: Text(
+                    name,
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: Text(
+                    '${(file.size / 1024).toStringAsFixed(1)} KB'
+                    '${file.modified != null ? '  •  ${Formatters.formatDateTime(file.modified!)}' : ''}',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
     );
-  }
-
-  void _toggleSelectAll() {
-    setState(() {
-      if (_selectedFiles.length == _files.length) {
-        _selectedFiles.clear();
-      } else {
-        _selectedFiles.addAll(_files.map((f) => f.filename));
-      }
-    });
-  }
-
-  Future<void> _loadSelected() async {
-    setState(() => _isLoading = true);
-
-    try {
-      final service = ref.read(measurementServiceProvider);
-      final selectedFileInfos = _files.where((f) => _selectedFiles.contains(f.filename)).toList();
-
-      final count = await service.loadSelectedFromPi(selectedFileInfos);
-      ref.read(measurementsProvider.notifier).refresh();
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$count Messung(en) geladen')),
-        );
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const MeasurementListScreen()),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fehler: $e'), backgroundColor: Colors.red),
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
   }
 }

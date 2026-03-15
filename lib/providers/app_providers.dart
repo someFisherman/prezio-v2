@@ -26,6 +26,14 @@ final protocolStorageProvider = Provider<ProtocolStorageService>((ref) {
   return ProtocolStorageService();
 });
 
+final weatherServiceProvider = Provider<WeatherService>((ref) {
+  return WeatherService();
+});
+
+final oneDriveServiceProvider = Provider<OneDriveService>((ref) {
+  return OneDriveService();
+});
+
 final measurementsProvider = StateNotifierProvider<MeasurementsNotifier, List<Measurement>>((ref) {
   final service = ref.watch(measurementServiceProvider);
   return MeasurementsNotifier(service);

@@ -146,7 +146,8 @@ class PressureChart extends StatelessWidget {
     for (int i = 0; i < measurement.samples.length; i++) {
       final sample = measurement.samples[i];
       final x = sample.timestamp.difference(measurement.startTime).inSeconds.toDouble();
-      spots.add(FlSpot(x, sample.pressureRounded));
+      final y = double.parse(sample.pressureRounded.toStringAsFixed(2));
+      spots.add(FlSpot(x, y));
     }
 
     return LineChartBarData(
@@ -182,12 +183,13 @@ class PressureChart extends StatelessWidget {
     for (int i = 0; i < measurement.samples.length; i++) {
       final sample = measurement.samples[i];
       final x = sample.timestamp.difference(measurement.startTime).inSeconds.toDouble();
+      final tempRounded = double.parse(sample.temperatureRounded.toStringAsFixed(2));
       double mappedY;
       if (tempRange < 0.01) {
         mappedY = (_calculateMinY() + _calculateMaxY()) / 2;
       } else {
         mappedY = _calculateMinY() +
-            (sample.temperatureRounded - measurement.minTemperature) /
+            (tempRounded - measurement.minTemperature) /
                 tempRange *
                 pressureRange;
       }

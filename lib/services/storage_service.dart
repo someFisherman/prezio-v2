@@ -47,4 +47,34 @@ class StorageService {
   Future<void> setLastProjectName(String name) async {
     await _prefs?.setString(StorageKeys.lastProjectName, name);
   }
+
+  String? getOutputFolderPath() {
+    return _prefs?.getString(StorageKeys.outputFolderPath);
+  }
+
+  String getOutputFolderName() {
+    return _prefs?.getString(StorageKeys.outputFolderName) ?? '';
+  }
+
+  Future<void> setOutputFolder(String? path, String? displayName) async {
+    if (path != null) {
+      await _prefs?.setString(StorageKeys.outputFolderPath, path);
+      await _prefs?.setString(StorageKeys.outputFolderName, displayName ?? path.split('/').last);
+    } else {
+      await _prefs?.remove(StorageKeys.outputFolderPath);
+      await _prefs?.remove(StorageKeys.outputFolderName);
+    }
+  }
+
+  String? getOneDriveRefreshToken() {
+    return _prefs?.getString(StorageKeys.oneDriveRefreshToken);
+  }
+
+  Future<void> setOneDriveRefreshToken(String? token) async {
+    if (token != null) {
+      await _prefs?.setString(StorageKeys.oneDriveRefreshToken, token);
+    } else {
+      await _prefs?.remove(StorageKeys.oneDriveRefreshToken);
+    }
+  }
 }

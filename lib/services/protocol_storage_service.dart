@@ -10,17 +10,19 @@ class ProtocolStorageResult {
   final String pdfPath;
   final String? csvPath;
   final String metadataPath;
+  final bool savedToCustomFolder;
 
   const ProtocolStorageResult({
     required this.folderPath,
     required this.pdfPath,
     this.csvPath,
     required this.metadataPath,
+    this.savedToCustomFolder = false,
   });
 }
 
 class ProtocolStorageService {
-  Future<Directory> get _baseDir async {
+  Future<Directory> get _localBaseDir async {
     final dir = await getApplicationDocumentsDirectory();
     final prezioDir = Directory('${dir.path}/Prezio/Protokolle');
     if (!await prezioDir.exists()) {
@@ -33,40 +35,72 @@ class ProtocolStorageService {
     required String pdfPath,
     String? csvContent,
     required ProtocolData protocolData,
+    String? customOutputFolder,
   }) async {
-    final base = await _baseDir;
     final folderName = _buildFolderName(protocolData);
-    final folder = Directory('${base.path}/$folderName');
-    if (!await folder.exists()) {
-      await folder.create(recursive: true);
-    }
-
     final date = Formatters.formatDate(protocolData.measurement.startTime)
         .replaceAll('.', '-');
     final result = protocolData.passed ? 'OK' : 'Nicht_OK';
 
-    final pdfDest = '${folder.path}/Druckprotokoll_${date}_$result.pdf';
+    // Try custom folder (OneDrive etc.) first, fall back to local
+    bool savedToCustom = false;
+    Directory targetFolder;
+
+    if (customOutputFolder != null) {
+      try {
+        final customBase = Directory(customOutputFolder);
+        if (await customBase.exists()) {
+          targetFolder = Directory('${customBase.path}/$folderName');
+          if (!await targetFolder.exists()) {
+            await targetFolder.create(recursive: true);
+          }
+          // Test write access
+          final testFile = File('${targetFolder.path}/.prezio_test');
+          await testFile.writeAsString('test');
+          await testFile.delete();
+          savedToCustom = true;
+        } else {
+          targetFolder = await _createLocalFolder(folderName);
+        }
+      } catch (_) {
+        targetFolder = await _createLocalFolder(folderName);
+      }
+    } else {
+      targetFolder = await _createLocalFolder(folderName);
+    }
+
+    final pdfDest = '${targetFolder.path}/Druckprotokoll_${date}_$result.pdf';
     await File(pdfPath).copy(pdfDest);
 
     String? csvDest;
     String? csvHash;
     if (csvContent != null) {
-      csvDest = '${folder.path}/Messdaten_$date.csv';
+      csvDest = '${targetFolder.path}/Messdaten_$date.csv';
       await File(csvDest).writeAsString(csvContent);
       csvHash = sha256.convert(utf8.encode(csvContent)).toString();
     }
 
     final metadata = _buildMetadata(protocolData, csvHash);
-    final metadataPath = '${folder.path}/metadata.json';
+    final metadataPath = '${targetFolder.path}/metadata.json';
     await File(metadataPath)
         .writeAsString(const JsonEncoder.withIndent('  ').convert(metadata));
 
     return ProtocolStorageResult(
-      folderPath: folder.path,
+      folderPath: targetFolder.path,
       pdfPath: pdfDest,
       csvPath: csvDest,
       metadataPath: metadataPath,
+      savedToCustomFolder: savedToCustom,
     );
+  }
+
+  Future<Directory> _createLocalFolder(String folderName) async {
+    final base = await _localBaseDir;
+    final folder = Directory('${base.path}/$folderName');
+    if (!await folder.exists()) {
+      await folder.create(recursive: true);
+    }
+    return folder;
   }
 
   String _buildFolderName(ProtocolData data) {
@@ -119,7 +153,7 @@ class ProtocolStorageService {
   }
 
   Future<List<ProtocolFolder>> listSavedProtocols() async {
-    final base = await _baseDir;
+    final base = await _localBaseDir;
     final folders = <ProtocolFolder>[];
 
     if (!await base.exists()) return folders;

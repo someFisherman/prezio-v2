@@ -1,7 +1,10 @@
+import 'dart:convert';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/models.dart';
 import '../providers/providers.dart';
+import '../utils/constants.dart';
 import '../utils/formatters.dart';
 
 class SendProtocolScreen extends ConsumerStatefulWidget {
@@ -18,19 +21,22 @@ class SendProtocolScreen extends ConsumerStatefulWidget {
 
 class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
   bool _isProcessing = true;
-  bool _isSaved = false;
+  bool _localSaved = false;
+  bool _cloudUploaded = false;
+  String? _cloudError;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _generateAndSave();
+    _generateSaveAndUpload();
   }
 
-  Future<void> _generateAndSave() async {
+  Future<void> _generateSaveAndUpload() async {
     setState(() {
       _isProcessing = true;
       _error = null;
+      _cloudError = null;
     });
 
     try {
@@ -41,18 +47,78 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
       final csvContent = measurementService.exportToCsv(widget.protocolData.measurement);
 
       final storageService = ref.read(protocolStorageProvider);
-      await storageService.saveProtocol(
+      final localResult = await storageService.saveProtocol(
         pdfPath: pdfPath,
         csvContent: csvContent,
         protocolData: widget.protocolData,
       );
 
-      setState(() => _isSaved = true);
+      setState(() => _localSaved = true);
+
+      // Auto-upload to OneDrive if connected
+      final storage = ref.read(storageServiceProvider);
+      await storage.init();
+      final oneDrive = ref.read(oneDriveServiceProvider);
+
+      final savedToken = storage.getOneDriveRefreshToken();
+      if (AppConstants.azureClientId.isNotEmpty && savedToken != null) {
+        oneDrive.configure(
+          clientId: AppConstants.azureClientId,
+          savedRefreshToken: savedToken,
+        );
+      }
+
+      if (oneDrive.isConnected) {
+        final folderName = localResult.folderPath.split('/').last.split('\\').last;
+        final metadataJson = _buildMetadataJson(widget.protocolData, csvContent);
+
+        final uploadResult = await oneDrive.uploadProtocol(
+          folderName: folderName,
+          pdfPath: pdfPath,
+          csvContent: csvContent,
+          metadataJson: metadataJson,
+        );
+
+        if (uploadResult.success) {
+          setState(() => _cloudUploaded = true);
+        } else {
+          setState(() => _cloudError = uploadResult.error ?? 'Upload fehlgeschlagen');
+        }
+      }
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
       setState(() => _isProcessing = false);
     }
+  }
+
+  String _buildMetadataJson(ProtocolData data, String csvContent) {
+    final csvHash = sha256.convert(utf8.encode(csvContent)).toString();
+    final meta = {
+      'version': '2.0',
+      'createdAt': DateTime.now().toIso8601String(),
+      'object': data.objectName,
+      'project': data.projectName,
+      'author': data.author,
+      'technician': data.technicianName,
+      'measurement': {
+        'filename': data.measurement.filename,
+        'startTime': data.measurement.startTime.toIso8601String(),
+        'endTime': data.measurement.endTime.toIso8601String(),
+        'durationSeconds': data.measurement.duration.inSeconds,
+        'sampleCount': data.measurement.samples.length,
+      },
+      'validation': {
+        'nominalPressure': data.nominalPressure,
+        'testMedium': data.testMedium.name,
+        'testPressure': data.testPressure,
+        'passed': data.passed,
+        'result': data.result,
+        'reason': data.validationReason,
+      },
+      'csvSha256': csvHash,
+    };
+    return const JsonEncoder.withIndent('  ').convert(meta);
   }
 
   @override
@@ -71,7 +137,8 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
             _buildStatusCard(),
             const SizedBox(height: 24),
             OutlinedButton.icon(
-              onPressed: () => Navigator.popUntil(context, (route) => route.isFirst),
+              onPressed: () =>
+                  Navigator.popUntil(context, (route) => route.isFirst),
               icon: const Icon(Icons.home),
               label: const Text('Zurueck zum Start'),
             ),
@@ -102,12 +169,15 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
                     children: [
                       Text(
                         'Druckprotokoll',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                              fontWeight: FontWeight.bold,
-                            ),
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleLarge
+                            ?.copyWith(fontWeight: FontWeight.bold),
                       ),
                       Text(
-                        widget.protocolData.passed ? 'Pruefung bestanden' : 'Pruefung nicht bestanden',
+                        widget.protocolData.passed
+                            ? 'Pruefung bestanden'
+                            : 'Pruefung nicht bestanden',
                         style: TextStyle(
                           color: widget.protocolData.passed ? Colors.green : Colors.red,
                           fontWeight: FontWeight.w500,
@@ -121,9 +191,11 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
             const Divider(height: 24),
             _buildSummaryRow('Objekt', widget.protocolData.objectName),
             _buildSummaryRow('Projekt', widget.protocolData.projectName),
-            _buildSummaryRow('Datum', Formatters.formatDate(widget.protocolData.measurement.startTime)),
+            _buildSummaryRow('Datum',
+                Formatters.formatDate(widget.protocolData.measurement.startTime)),
             _buildSummaryRow('Monteur', widget.protocolData.technicianName),
-            _buildSummaryRow('Pruefdruck', Formatters.formatPressureWithUnit(widget.protocolData.testPressure)),
+            _buildSummaryRow('Pruefdruck',
+                Formatters.formatPressureWithUnit(widget.protocolData.testPressure)),
             _buildSummaryRow('Dauer', widget.protocolData.testDuration),
           ],
         ),
@@ -133,7 +205,6 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
 
   Widget _buildSummaryRow(String label, String value) {
     if (value.isEmpty) return const SizedBox.shrink();
-
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -155,21 +226,21 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
           children: [
             Text(
               'Speicher-Status',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(context)
+                  .textTheme
+                  .titleMedium
+                  ?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
             if (_isProcessing)
               const Row(
                 children: [
                   SizedBox(
-                    width: 24,
-                    height: 24,
+                    width: 24, height: 24,
                     child: CircularProgressIndicator(strokeWidth: 2),
                   ),
                   SizedBox(width: 12),
-                  Text('PDF wird erstellt und gespeichert...'),
+                  Text('Wird gespeichert und hochgeladen...'),
                 ],
               )
             else if (_error != null)
@@ -178,65 +249,70 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
                   const Icon(Icons.error, color: Colors.red),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Text(
-                      'Fehler: $_error',
-                      style: const TextStyle(color: Colors.red),
-                    ),
+                    child: Text('Fehler: $_error',
+                        style: const TextStyle(color: Colors.red)),
                   ),
                 ],
               )
-            else if (_isSaved)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.check_circle, color: Colors.green),
-                      SizedBox(width: 12),
-                      Text('Protokoll erfolgreich gespeichert'),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.folder, color: Colors.grey[600]),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Gespeicherte Dateien:',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w500,
-                                  color: Colors.grey[700],
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'PDF + CSV + Metadaten',
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+            else ...[
+              _buildStatusRow(
+                icon: Icons.phone_iphone,
+                label: 'Lokal gespeichert',
+                success: _localSaved,
               ),
+              const SizedBox(height: 8),
+              _buildStatusRow(
+                icon: Icons.cloud_upload,
+                label: 'OneDrive',
+                success: _cloudUploaded,
+                error: _cloudError,
+                notConfigured: !_cloudUploaded && _cloudError == null && _localSaved,
+              ),
+            ],
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildStatusRow({
+    required IconData icon,
+    required String label,
+    required bool success,
+    String? error,
+    bool notConfigured = false,
+  }) {
+    Color color;
+    IconData statusIcon;
+    String statusText;
+
+    if (success) {
+      color = Colors.green;
+      statusIcon = Icons.check_circle;
+      statusText = label;
+    } else if (error != null) {
+      color = Colors.orange;
+      statusIcon = Icons.warning;
+      statusText = '$label - $error';
+    } else if (notConfigured) {
+      color = Colors.grey;
+      statusIcon = Icons.remove_circle_outline;
+      statusText = '$label - nicht verbunden';
+    } else {
+      color = Colors.grey;
+      statusIcon = Icons.hourglass_empty;
+      statusText = '$label...';
+    }
+
+    return Row(
+      children: [
+        Icon(statusIcon, color: color, size: 20),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(statusText,
+              style: TextStyle(color: color, fontWeight: FontWeight.w500)),
+        ),
+      ],
     );
   }
 }

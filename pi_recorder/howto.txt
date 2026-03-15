@@ -1,0 +1,75 @@
+Raspberry Pi aufsetzen - Komplettanleitung
+
+Schritt 1: SD-Karte vorbereiten (auf deinem Windows-PC)
+Raspberry Pi Imager herunterladen und installieren: https://www.raspberrypi.com/software/
+
+Imager starten, dann:
+
+Geraet: Raspberry Pi 4
+Betriebssystem: "Raspberry Pi OS Lite (64-bit)" (unter "Raspberry Pi OS (other)") -- das ist OHNE Desktop, reicht voellig
+Speicher: Deine 32GB SD-Karte
+Bevor du auf "Schreiben" klickst: Auf das Zahnrad-Icon / "Einstellungen bearbeiten" klicken:
+
+Hostname: prezio-pi
+SSH aktivieren: Ja, mit Passwort-Authentifizierung
+Benutzername: pi
+Passwort: Ein sicheres Passwort setzen (z.B. Prezio2026!)
+WLAN konfigurieren: Dein normales Heim-/Buero-WiFi eintragen (damit du erstmal drauf kommst fuer die Ersteinrichtung!)
+Land/Zeitzone: CH / Europe/Zurich
+Schreiben klicken, warten bis fertig.
+
+Schritt 2: Pi starten und per SSH verbinden
+SD-Karte in den Pi stecken
+
+USB-Seriell-Adapter (KELLER LEO5) anschliessen
+
+Strom anschliessen - Pi bootet
+
+~60 Sekunden warten
+
+SSH-Verbindung von deinem PC (PowerShell):
+
+ssh pi@prezio-pi.local
+Falls prezio-pi.local nicht gefunden wird, musst du die IP-Adresse im Router nachschauen, dann:
+
+ssh pi@192.168.x.x
+Schritt 3: Prezio-Software installieren
+Sobald du per SSH auf dem Pi bist:
+
+# Git installieren und Repo klonen
+sudo apt update && sudo apt install -y git python3-pip python3-venv
+# Repo klonen
+cd /home/pi
+git clone https://github.com/someFisherman/prezio-v2.git
+# Setup-Skript ausfuehren (installiert alles: WiFi AP, Service, Python)
+cd prezio-v2/pi_recorder
+sudo bash setup_pi.sh
+Das Setup-Skript macht automatisch:
+
+WiFi Access Point einrichten (SSID: Prezio-Recorder, Passwort: prezio2026)
+Python venv + pyserial installieren
+systemd Service anlegen (startet automatisch bei Boot)
+Schritt 4: Neustart
+sudo reboot
+Ab jetzt braucht der Pi kein normales WiFi mehr. Er erstellt sein eigenes Netzwerk.
+
+Schritt 5: Testen
+Auf deinem Handy nach dem WiFi Prezio-Recorder suchen
+Verbinden (Passwort: prezio2026)
+Im Browser oeffnen: http://192.168.4.1:8080/health
+Sollte JSON zurueckgeben mit Sensorstatus
+Zusammenfassung: Was passiert beim Einschalten
+Pi bekommt Strom
+  -> Bootet Raspberry Pi OS (~30s)
+  -> WiFi AP startet automatisch (Prezio-Recorder)
+  -> pi_recorder.py startet automatisch (systemd)
+  -> Sensor wird automatisch erkannt
+  -> HTTP API laeuft auf 192.168.4.1:8080
+  -> Handy verbindet sich, App steuert alles
+Falls du spaeter nochmal per SSH drauf musst
+Da der Pi dann als WiFi AP laeuft (kein normales WiFi mehr), verbindest du dein Laptop mit dem Prezio-Recorder WiFi und dann:
+
+ssh pi@192.168.4.1
+Service-Logs anschauen (fuer Fehlersuche)
+
+sudo journalctl -u prezio-recorder -f
