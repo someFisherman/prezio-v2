@@ -12,12 +12,6 @@ class AppConstants {
   static const Duration requestTimeout = Duration(seconds: 30);
 
   static const double defaultRecordingInterval = 10.0;
-
-  /// Azure AD Application (Client) ID for OneDrive integration.
-  /// Register at: https://portal.azure.com > App registrations
-  /// Set redirect URI to: prezio://auth (Mobile/Desktop)
-  /// API permissions: Microsoft Graph > Files.ReadWrite (delegated)
-  static const String azureClientId = 'eb002767-9d98-4f11-a67e-99e499edd3db';  // TODO: Fill in after Azure registration
 }
 
 class StorageKeys {
@@ -28,5 +22,4 @@ class StorageKeys {
   static const String lastProjectName = 'last_project_name';
   static const String outputFolderPath = 'output_folder_path';
   static const String outputFolderName = 'output_folder_name';
-  static const String oneDriveRefreshToken = 'onedrive_refresh_token';
 }

@@ -42,7 +42,7 @@ class ProtocolStorageService {
         .replaceAll('.', '-');
     final result = protocolData.passed ? 'OK' : 'Nicht_OK';
 
-    // Try custom folder (OneDrive etc.) first, fall back to local
+    // Try custom folder first, fall back to local
     bool savedToCustom = false;
     Directory targetFolder;
 

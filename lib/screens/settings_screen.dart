@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/providers.dart';
 import '../utils/constants.dart';
+import 'login_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -15,8 +16,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late TextEditingController _addressController;
   late TextEditingController _portController;
   bool _isLoading = true;
-  bool _oneDriveConnected = false;
-  bool _oneDriveLoggingIn = false;
 
   @override
   void initState() {
@@ -31,20 +30,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final storage = ref.read(storageServiceProvider);
     await storage.init();
 
-    final oneDrive = ref.read(oneDriveServiceProvider);
-    final savedToken = storage.getOneDriveRefreshToken();
-    if (AppConstants.azureClientId.isNotEmpty && savedToken != null) {
-      oneDrive.configure(
-        clientId: AppConstants.azureClientId,
-        savedRefreshToken: savedToken,
-      );
-    }
-
     setState(() {
       _nameController.text = storage.getTechnicianName();
       _addressController.text = storage.getPiAddress();
       _portController.text = storage.getPiPort().toString();
-      _oneDriveConnected = oneDrive.isConnected;
       _isLoading = false;
     });
   }
@@ -57,70 +46,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     super.dispose();
   }
 
-  Future<void> _loginOneDrive() async {
-    if (AppConstants.azureClientId.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Azure Client-ID fehlt. Bitte in constants.dart eintragen.'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-      return;
-    }
-
-    setState(() => _oneDriveLoggingIn = true);
-
-    final oneDrive = ref.read(oneDriveServiceProvider);
-    oneDrive.configure(clientId: AppConstants.azureClientId);
-
-    final refreshToken = await oneDrive.login();
-
-    if (refreshToken != null) {
-      final storage = ref.read(storageServiceProvider);
-      await storage.setOneDriveRefreshToken(refreshToken);
-
-      if (mounted) {
-        setState(() {
-          _oneDriveConnected = true;
-          _oneDriveLoggingIn = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('OneDrive verbunden')),
-        );
-      }
-    } else {
-      if (mounted) {
-        setState(() => _oneDriveLoggingIn = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('OneDrive-Anmeldung fehlgeschlagen'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _logoutOneDrive() async {
-    final oneDrive = ref.read(oneDriveServiceProvider);
-    oneDrive.logout();
-
-    final storage = ref.read(storageServiceProvider);
-    await storage.setOneDriveRefreshToken(null);
-
-    setState(() => _oneDriveConnected = false);
+  Future<void> _logoutGoogle() async {
+    final driveService = ref.read(googleDriveServiceProvider);
+    await driveService.signOut();
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('OneDrive getrennt')),
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (route) => false,
       );
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final driveService = ref.read(googleDriveServiceProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Einstellungen'),
@@ -153,7 +95,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  _buildOneDriveCard(),
+                  _buildGoogleCard(driveService),
                   const SizedBox(height: 16),
                   _buildSectionCard(
                     'Raspberry Pi Verbindung',
@@ -193,7 +135,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
   }
 
-  Widget _buildOneDriveCard() {
+  Widget _buildGoogleCard(dynamic driveService) {
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -203,12 +145,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             Row(
               children: [
                 Icon(
-                  _oneDriveConnected ? Icons.cloud_done : Icons.cloud_off,
-                  color: _oneDriveConnected ? Colors.blue : Colors.grey,
+                  driveService.isSignedIn ? Icons.cloud_done : Icons.cloud_off,
+                  color: driveService.isSignedIn ? Colors.blue : Colors.grey,
                 ),
                 const SizedBox(width: 8),
                 Text(
-                  'OneDrive',
+                  'Google Drive',
                   style: Theme.of(context)
                       .textTheme
                       .titleMedium
@@ -217,7 +159,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ],
             ),
             const SizedBox(height: 12),
-            if (_oneDriveConnected) ...[
+            if (driveService.isSignedIn) ...[
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
@@ -229,10 +171,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   children: [
                     const Icon(Icons.check_circle, color: Colors.green, size: 20),
                     const SizedBox(width: 8),
-                    const Expanded(
-                      child: Text(
-                        'Verbunden - Protokolle werden automatisch hochgeladen',
-                        style: TextStyle(fontWeight: FontWeight.w500),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            driveService.userName ?? 'Verbunden',
+                            style: const TextStyle(fontWeight: FontWeight.w500),
+                          ),
+                          if (driveService.userEmail != null)
+                            Text(
+                              driveService.userEmail!,
+                              style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                            ),
+                        ],
                       ),
                     ),
                   ],
@@ -240,56 +192,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Zielordner: OneDrive > Prezio > Protokolle',
+                'Zielordner: Google Drive > Prezio > Protokolle',
                 style: TextStyle(color: Colors.grey[600], fontSize: 12),
               ),
               const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,
                 child: OutlinedButton.icon(
-                  onPressed: _logoutOneDrive,
+                  onPressed: _logoutGoogle,
                   icon: const Icon(Icons.logout, size: 18),
-                  label: const Text('OneDrive trennen'),
+                  label: const Text('Abmelden'),
                   style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
                 ),
               ),
             ] else ...[
               Text(
-                'Protokolle werden nur lokal gespeichert. '
-                'Mit Microsoft anmelden fuer automatische OneDrive-Synchronisation.',
+                'Nicht angemeldet. Bitte App neu starten und sich mit Google anmelden.',
                 style: TextStyle(color: Colors.grey[600], fontSize: 13),
-              ),
-              if (AppConstants.azureClientId.isEmpty) ...[
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    'Azure Client-ID noch nicht konfiguriert. '
-                    'Siehe constants.dart',
-                    style: TextStyle(color: Colors.orange[700], fontSize: 12),
-                  ),
-                ),
-              ],
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _oneDriveLoggingIn ? null : _loginOneDrive,
-                  icon: _oneDriveLoggingIn
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.login),
-                  label: Text(_oneDriveLoggingIn
-                      ? 'Anmeldung laeuft...'
-                      : 'Mit Microsoft anmelden'),
-                ),
               ),
             ],
           ],

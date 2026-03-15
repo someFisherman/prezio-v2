@@ -66,15 +66,4 @@ class StorageService {
     }
   }
 
-  String? getOneDriveRefreshToken() {
-    return _prefs?.getString(StorageKeys.oneDriveRefreshToken);
-  }
-
-  Future<void> setOneDriveRefreshToken(String? token) async {
-    if (token != null) {
-      await _prefs?.setString(StorageKeys.oneDriveRefreshToken, token);
-    } else {
-      await _prefs?.remove(StorageKeys.oneDriveRefreshToken);
-    }
-  }
 }

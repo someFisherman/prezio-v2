@@ -55,5 +55,18 @@
 	<false/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Prezio benötigt den Standort um Wetterdaten für die Druckprüfung abzurufen.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.81141223360-057b5afpjrs3a521pts1rm9n11msche6</string>
+			</array>
+		</dict>
+	</array>
+	<key>GIDClientID</key>
+	<string>81141223360-057b5afpjrs3a521pts1rm9n11msche6.apps.googleusercontent.com</string>
 </dict>
 </plist>

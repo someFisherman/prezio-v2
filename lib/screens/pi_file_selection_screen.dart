@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/providers.dart';
 import '../services/services.dart';
 import '../utils/formatters.dart';
-import 'protocol_form_screen.dart';
+import 'internet_check_screen.dart';
 
 class PiFileSelectionScreen extends ConsumerStatefulWidget {
   const PiFileSelectionScreen({super.key});
@@ -105,7 +105,7 @@ class _PiFileSelectionScreenState extends ConsumerState<PiFileSelectionScreen> {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (_) => ProtocolFormScreen(measurement: measurement),
+            builder: (_) => InternetCheckScreen(measurement: measurement),
           ),
         );
       }

@@ -8,10 +8,12 @@ import 'signature_screen.dart';
 
 class ProtocolFormScreen extends ConsumerStatefulWidget {
   final Measurement measurement;
+  final WeatherData? weatherData;
 
   const ProtocolFormScreen({
     super.key,
     required this.measurement,
+    this.weatherData,
   });
 
   @override
@@ -30,9 +32,6 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
   int _selectedPN = 25;
   TestMedium _selectedMedium = TestMedium.air;
   ValidationResult? _validationResult;
-  WeatherData? _weatherData;
-  bool _weatherLoading = false;
-  String? _weatherError;
 
   bool get _hasLockedParams => widget.measurement.hasRecordingMetadata;
 
@@ -53,7 +52,6 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
     
     _loadStoredValues();
     _runValidation();
-    _fetchWeather();
   }
 
   Future<void> _loadStoredValues() async {
@@ -67,39 +65,6 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
     });
   }
 
-  Future<void> _fetchWeather() async {
-    setState(() {
-      _weatherLoading = true;
-      _weatherError = null;
-    });
-
-    try {
-      final weatherService = ref.read(weatherServiceProvider);
-      final data = await weatherService.fetchForPeriod(
-        widget.measurement.startTime,
-        widget.measurement.endTime,
-      );
-
-      if (mounted) {
-        setState(() {
-          _weatherData = data;
-          _weatherLoading = false;
-          if (data == null) {
-            _weatherError = 'Kein Internet - Wetterdaten nicht verfuegbar';
-          }
-        });
-        _runValidation();
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _weatherLoading = false;
-          _weatherError = 'Wetterdaten konnten nicht geladen werden';
-        });
-      }
-    }
-  }
-
   void _runValidation() {
     final validationService = ref.read(validationServiceProvider);
     setState(() {
@@ -107,7 +72,7 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
         widget.measurement,
         _selectedPN,
         _selectedMedium,
-        weather: _weatherData,
+        weather: widget.weatherData,
       );
     });
   }
@@ -336,26 +301,9 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
   }
 
   Widget _buildWeatherCard() {
-    if (_weatherLoading) {
-      return Card(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-              const SizedBox(width: 12),
-              Text('Wetterdaten werden geladen...', style: TextStyle(color: Colors.grey[600])),
-            ],
-          ),
-        ),
-      );
-    }
+    final w = widget.weatherData;
 
-    if (_weatherError != null && _weatherData == null) {
+    if (w == null) {
       return Card(
         color: Colors.orange.withValues(alpha: 0.05),
         shape: RoundedRectangleBorder(
@@ -373,7 +321,7 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _weatherError!,
+                      'Wetterdaten nicht verfuegbar',
                       style: TextStyle(color: Colors.grey[700]),
                     ),
                     const SizedBox(height: 4),
@@ -384,60 +332,50 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
                   ],
                 ),
               ),
-              IconButton(
-                onPressed: _fetchWeather,
-                icon: const Icon(Icons.refresh, size: 20),
-                tooltip: 'Erneut versuchen',
-              ),
             ],
           ),
         ),
       );
     }
 
-    if (_weatherData != null) {
-      final w = _weatherData!;
-      return Card(
-        color: Colors.blue.withValues(alpha: 0.05),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: Colors.blue.withValues(alpha: 0.3)),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.wb_sunny, color: Colors.blue, size: 22),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Wetterdaten',
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              _buildReadOnlyRow('Aussentemp. Start', '${w.outdoorTempStart.toStringAsFixed(1)} °C'),
-              _buildReadOnlyRow('Aussentemp. Ende', '${w.outdoorTempEnd.toStringAsFixed(1)} °C'),
-              _buildReadOnlyRow('Min / Max', '${w.minTemp.toStringAsFixed(1)} / ${w.maxTemp.toStringAsFixed(1)} °C'),
-              _buildReadOnlyRow('Schwankung', '${w.tempSwing.toStringAsFixed(1)} °C'),
-              if (w.additionalTolerance > 0)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    'Toleranz wird um ${(w.additionalTolerance * 100).toStringAsFixed(1)}% angepasst',
-                    style: TextStyle(color: Colors.blue[700], fontSize: 12, fontWeight: FontWeight.w500),
-                  ),
+    return Card(
+      color: Colors.blue.withValues(alpha: 0.05),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(color: Colors.blue.withValues(alpha: 0.3)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.wb_sunny, color: Colors.blue, size: 22),
+                const SizedBox(width: 8),
+                Text(
+                  'Wetterdaten',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
                 ),
-            ],
-          ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _buildReadOnlyRow('Aussentemp. Start', '${w.outdoorTempStart.toStringAsFixed(1)} °C'),
+            _buildReadOnlyRow('Aussentemp. Ende', '${w.outdoorTempEnd.toStringAsFixed(1)} °C'),
+            _buildReadOnlyRow('Min / Max', '${w.minTemp.toStringAsFixed(1)} / ${w.maxTemp.toStringAsFixed(1)} °C'),
+            _buildReadOnlyRow('Schwankung', '${w.tempSwing.toStringAsFixed(1)} °C'),
+            if (w.additionalTolerance > 0)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  'Toleranz wird um ${(w.additionalTolerance * 100).toStringAsFixed(1)}% angepasst',
+                  style: TextStyle(color: Colors.blue[700], fontSize: 12, fontWeight: FontWeight.w500),
+                ),
+              ),
+          ],
         ),
-      );
-    }
-
-    return const SizedBox.shrink();
+      ),
+    );
   }
 
   Widget _buildValidationCard() {

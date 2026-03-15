@@ -45,7 +45,9 @@ dependencies:
   csv: ^6.0.0
   crypto: ^3.0.6
   geolocator: ^14.0.2
-  flutter_web_auth_2: ^5.0.1
+  google_sign_in: ^7.2.0
+  googleapis: ^16.0.0
+  extension_google_sign_in_as_googleapis_auth: ^3.0.0
 
 dev_dependencies:
   flutter_test:

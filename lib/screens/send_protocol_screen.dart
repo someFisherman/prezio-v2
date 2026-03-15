@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/models.dart';
 import '../providers/providers.dart';
-import '../utils/constants.dart';
 import '../utils/formatters.dart';
 
 class SendProtocolScreen extends ConsumerStatefulWidget {
@@ -55,24 +54,13 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
 
       setState(() => _localSaved = true);
 
-      // Auto-upload to OneDrive if connected
-      final storage = ref.read(storageServiceProvider);
-      await storage.init();
-      final oneDrive = ref.read(oneDriveServiceProvider);
-
-      final savedToken = storage.getOneDriveRefreshToken();
-      if (AppConstants.azureClientId.isNotEmpty && savedToken != null) {
-        oneDrive.configure(
-          clientId: AppConstants.azureClientId,
-          savedRefreshToken: savedToken,
-        );
-      }
-
-      if (oneDrive.isConnected) {
+      // Upload to Google Drive
+      final driveService = ref.read(googleDriveServiceProvider);
+      if (driveService.isSignedIn) {
         final folderName = localResult.folderPath.split('/').last.split('\\').last;
         final metadataJson = _buildMetadataJson(widget.protocolData, csvContent);
 
-        final uploadResult = await oneDrive.uploadProtocol(
+        final uploadResult = await driveService.uploadProtocol(
           folderName: folderName,
           pdfPath: pdfPath,
           csvContent: csvContent,
@@ -84,6 +72,8 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
         } else {
           setState(() => _cloudError = uploadResult.error ?? 'Upload fehlgeschlagen');
         }
+      } else {
+        setState(() => _cloudError = 'Nicht mit Google angemeldet');
       }
     } catch (e) {
       setState(() => _error = e.toString());
@@ -263,10 +253,9 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
               const SizedBox(height: 8),
               _buildStatusRow(
                 icon: Icons.cloud_upload,
-                label: 'OneDrive',
+                label: 'Google Drive',
                 success: _cloudUploaded,
                 error: _cloudError,
-                notConfigured: !_cloudUploaded && _cloudError == null && _localSaved,
               ),
             ],
           ],
@@ -280,7 +269,6 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
     required String label,
     required bool success,
     String? error,
-    bool notConfigured = false,
   }) {
     Color color;
     IconData statusIcon;
@@ -294,10 +282,6 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
       color = Colors.orange;
       statusIcon = Icons.warning;
       statusText = '$label - $error';
-    } else if (notConfigured) {
-      color = Colors.grey;
-      statusIcon = Icons.remove_circle_outline;
-      statusText = '$label - nicht verbunden';
     } else {
       color = Colors.grey;
       statusIcon = Icons.hourglass_empty;
