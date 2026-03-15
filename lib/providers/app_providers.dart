@@ -30,10 +30,6 @@ final weatherServiceProvider = Provider<WeatherService>((ref) {
   return WeatherService();
 });
 
-final googleDriveServiceProvider = Provider<GoogleDriveService>((ref) {
-  return GoogleDriveService();
-});
-
 final measurementsProvider = StateNotifierProvider<MeasurementsNotifier, List<Measurement>>((ref) {
   final service = ref.watch(measurementServiceProvider);
   return MeasurementsNotifier(service);

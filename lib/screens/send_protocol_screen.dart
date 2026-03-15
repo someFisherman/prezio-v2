@@ -1,10 +1,7 @@
-import 'dart:convert';
-import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/models.dart';
 import '../providers/providers.dart';
-import '../services/google_drive_service.dart';
 import '../utils/formatters.dart';
 
 class SendProtocolScreen extends ConsumerStatefulWidget {
@@ -21,22 +18,19 @@ class SendProtocolScreen extends ConsumerStatefulWidget {
 
 class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
   bool _isProcessing = true;
-  bool _localSaved = false;
-  bool _cloudUploaded = false;
-  String? _cloudError;
   String? _error;
+  String? _savedPath;
 
   @override
   void initState() {
     super.initState();
-    _generateSaveAndUpload();
+    _generateAndSave();
   }
 
-  Future<void> _generateSaveAndUpload() async {
+  Future<void> _generateAndSave() async {
     setState(() {
       _isProcessing = true;
       _error = null;
-      _cloudError = null;
     });
 
     try {
@@ -53,82 +47,12 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
         protocolData: widget.protocolData,
       );
 
-      setState(() => _localSaved = true);
-
-      // Try Google Drive upload (best-effort, never blocks the app)
-      try {
-        final driveService = ref.read(googleDriveServiceProvider);
-
-        // Try silent sign-in if not already signed in (with timeout)
-        if (!driveService.isSignedIn) {
-          await driveService.trySilentSignIn().timeout(
-            const Duration(seconds: 8),
-            onTimeout: () => false,
-          );
-        }
-
-        if (driveService.isSignedIn) {
-          final folderName = localResult.folderPath.split('/').last.split('\\').last;
-          final metadataJson = _buildMetadataJson(widget.protocolData, csvContent);
-
-          final uploadResult = await driveService.uploadProtocol(
-            folderName: folderName,
-            pdfPath: pdfPath,
-            csvContent: csvContent,
-            metadataJson: metadataJson,
-          ).timeout(
-            const Duration(seconds: 30),
-            onTimeout: () => const GoogleDriveUploadResult(
-              success: false,
-              error: 'Upload Timeout',
-            ),
-          );
-
-          if (uploadResult.success) {
-            setState(() => _cloudUploaded = true);
-          } else {
-            setState(() => _cloudError = uploadResult.error ?? 'Upload fehlgeschlagen');
-          }
-        } else {
-          setState(() => _cloudError = 'Google nicht verbunden (in Einstellungen anmelden)');
-        }
-      } catch (_) {
-        setState(() => _cloudError = 'Google Drive nicht erreichbar');
-      }
+      setState(() => _savedPath = localResult.folderPath);
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
       setState(() => _isProcessing = false);
     }
-  }
-
-  String _buildMetadataJson(ProtocolData data, String csvContent) {
-    final csvHash = sha256.convert(utf8.encode(csvContent)).toString();
-    final meta = {
-      'version': '2.0',
-      'createdAt': DateTime.now().toIso8601String(),
-      'object': data.objectName,
-      'project': data.projectName,
-      'author': data.author,
-      'technician': data.technicianName,
-      'measurement': {
-        'filename': data.measurement.filename,
-        'startTime': data.measurement.startTime.toIso8601String(),
-        'endTime': data.measurement.endTime.toIso8601String(),
-        'durationSeconds': data.measurement.duration.inSeconds,
-        'sampleCount': data.measurement.samples.length,
-      },
-      'validation': {
-        'nominalPressure': data.nominalPressure,
-        'testMedium': data.testMedium.name,
-        'testPressure': data.testPressure,
-        'passed': data.passed,
-        'result': data.result,
-        'reason': data.validationReason,
-      },
-      'csvSha256': csvHash,
-    };
-    return const JsonEncoder.withIndent('  ').convert(meta);
   }
 
   @override
@@ -250,7 +174,7 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   ),
                   SizedBox(width: 12),
-                  Text('Wird gespeichert und hochgeladen...'),
+                  Text('Wird gespeichert...'),
                 ],
               )
             else if (_error != null)
@@ -265,58 +189,34 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
                 ],
               )
             else ...[
-              _buildStatusRow(
-                icon: Icons.phone_iphone,
-                label: 'Lokal gespeichert',
-                success: _localSaved,
+              Row(
+                children: [
+                  const Icon(Icons.check_circle, color: Colors.green, size: 20),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Lokal gespeichert',
+                      style: TextStyle(
+                        color: Colors.green,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
-              _buildStatusRow(
-                icon: Icons.cloud_upload,
-                label: 'Google Drive',
-                success: _cloudUploaded,
-                error: _cloudError,
-              ),
+              if (_savedPath != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _savedPath!,
+                  style: TextStyle(color: Colors.grey[500], fontSize: 11),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ],
           ],
         ),
       ),
-    );
-  }
-
-  Widget _buildStatusRow({
-    required IconData icon,
-    required String label,
-    required bool success,
-    String? error,
-  }) {
-    Color color;
-    IconData statusIcon;
-    String statusText;
-
-    if (success) {
-      color = Colors.green;
-      statusIcon = Icons.check_circle;
-      statusText = label;
-    } else if (error != null) {
-      color = Colors.orange;
-      statusIcon = Icons.warning;
-      statusText = '$label - $error';
-    } else {
-      color = Colors.grey;
-      statusIcon = Icons.hourglass_empty;
-      statusText = '$label...';
-    }
-
-    return Row(
-      children: [
-        Icon(statusIcon, color: color, size: 20),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(statusText,
-              style: TextStyle(color: color, fontWeight: FontWeight.w500)),
-        ),
-      ],
     );
   }
 }

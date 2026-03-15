@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
 import '../models/models.dart';
 import '../providers/providers.dart';
 import '../services/services.dart';
@@ -40,8 +41,15 @@ class _InternetCheckScreenState extends ConsumerState<InternetCheckScreen> {
   Future<void> _checkConnection() async {
     setState(() => _checking = true);
 
-    final driveService = ref.read(googleDriveServiceProvider);
-    final hasInternet = await driveService.checkInternetConnection();
+    bool hasInternet;
+    try {
+      final response = await http
+          .get(Uri.parse('https://www.google.com'))
+          .timeout(const Duration(seconds: 5));
+      hasInternet = response.statusCode == 200;
+    } catch (_) {
+      hasInternet = false;
+    }
 
     if (mounted) {
       setState(() {

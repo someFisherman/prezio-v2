@@ -15,7 +15,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late TextEditingController _addressController;
   late TextEditingController _portController;
   bool _isLoading = true;
-  bool _googleLoggingIn = false;
 
   @override
   void initState() {
@@ -46,38 +45,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     super.dispose();
   }
 
-  Future<void> _loginGoogle() async {
-    setState(() => _googleLoggingIn = true);
-    final driveService = ref.read(googleDriveServiceProvider);
-    final success = await driveService.signIn();
-    if (mounted) {
-      setState(() => _googleLoggingIn = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(success
-              ? 'Google Drive verbunden'
-              : 'Anmeldung fehlgeschlagen'),
-          backgroundColor: success ? Colors.green : Colors.red,
-        ),
-      );
-    }
-  }
-
-  Future<void> _logoutGoogle() async {
-    final driveService = ref.read(googleDriveServiceProvider);
-    await driveService.signOut();
-    if (mounted) {
-      setState(() {});
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Google Drive getrennt')),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final driveService = ref.read(googleDriveServiceProvider);
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Einstellungen'),
@@ -110,8 +79,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  _buildGoogleCard(driveService),
-                  const SizedBox(height: 16),
                   _buildSectionCard(
                     'Raspberry Pi Verbindung',
                     Icons.wifi,
@@ -137,6 +104,22 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                   const SizedBox(height: 16),
                   _buildSectionCard(
+                    'Speicher',
+                    Icons.folder,
+                    [
+                      Text(
+                        'Protokolle werden lokal auf dem Geraet gespeichert.',
+                        style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Pfad: Prezio/Protokolle/{Objekt}_{Datum}/',
+                        style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  _buildSectionCard(
                     'Info',
                     Icons.info_outline,
                     [
@@ -147,105 +130,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ],
               ),
             ),
-    );
-  }
-
-  Widget _buildGoogleCard(dynamic driveService) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(
-                  driveService.isSignedIn ? Icons.cloud_done : Icons.cloud_off,
-                  color: driveService.isSignedIn ? Colors.blue : Colors.grey,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  'Google Drive',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleMedium
-                      ?.copyWith(fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            if (driveService.isSignedIn) ...[
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.green.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.check_circle, color: Colors.green, size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            driveService.userName ?? 'Verbunden',
-                            style: const TextStyle(fontWeight: FontWeight.w500),
-                          ),
-                          if (driveService.userEmail != null)
-                            Text(
-                              driveService.userEmail!,
-                              style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Zielordner: Google Drive > Prezio > Protokolle',
-                style: TextStyle(color: Colors.grey[600], fontSize: 12),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: _logoutGoogle,
-                  icon: const Icon(Icons.logout, size: 18),
-                  label: const Text('Abmelden'),
-                  style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
-                ),
-              ),
-            ] else ...[
-              Text(
-                'Nicht angemeldet. Protokolle werden nur lokal gespeichert.',
-                style: TextStyle(color: Colors.grey[600], fontSize: 13),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _googleLoggingIn ? null : _loginGoogle,
-                  icon: _googleLoggingIn
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.login),
-                  label: Text(_googleLoggingIn
-                      ? 'Anmeldung laeuft...'
-                      : 'Mit Google anmelden'),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
     );
   }
 
