@@ -5,6 +5,7 @@ import '../providers/providers.dart';
 import '../utils/constants.dart';
 import 'measurement_list_screen.dart';
 import 'pi_file_selection_screen.dart';
+import 'pi_recording_screen.dart';
 import 'settings_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
@@ -109,17 +110,28 @@ class HomeScreen extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Messungen laden',
+            Text('Raspberry Pi',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
                 onPressed: () {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const PiRecordingScreen()));
+                },
+                icon: const Icon(Icons.fiber_manual_record),
+                label: const Text('Aufzeichnung starten / stoppen'),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const PiFileSelectionScreen()));
                 },
-                icon: const Icon(Icons.wifi),
-                label: const Text('Vom Raspberry Pi laden'),
+                icon: const Icon(Icons.download),
+                label: const Text('Messungen vom Pi laden'),
               ),
             ),
           ],

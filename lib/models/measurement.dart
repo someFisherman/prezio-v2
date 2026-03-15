@@ -2,6 +2,17 @@ import 'sample.dart';
 
 enum ValidationStatus { pending, valid, invalid }
 
+class CsvMetadata {
+  final String? name;
+  final int? pn;
+  final String? medium;
+  final double? intervalS;
+
+  const CsvMetadata({this.name, this.pn, this.medium, this.intervalS});
+
+  bool get hasRecordingParams => pn != null && medium != null;
+}
+
 class Measurement {
   final String id;
   final String filename;
@@ -11,6 +22,7 @@ class Measurement {
   final List<Sample> samples;
   final ValidationStatus validationStatus;
   final String? validationReason;
+  final CsvMetadata? metadata;
   
   double get minPressure => samples.isEmpty 
       ? 0.0 
@@ -32,6 +44,8 @@ class Measurement {
       ? 0.0 
       : samples.map((s) => s.temperatureRounded).reduce((a, b) => a > b ? a : b);
 
+  bool get hasRecordingMetadata => metadata?.hasRecordingParams ?? false;
+
   const Measurement({
     required this.id,
     required this.filename,
@@ -41,6 +55,7 @@ class Measurement {
     required this.samples,
     this.validationStatus = ValidationStatus.pending,
     this.validationReason,
+    this.metadata,
   });
 
   Measurement copyWith({
@@ -52,6 +67,7 @@ class Measurement {
     List<Sample>? samples,
     ValidationStatus? validationStatus,
     String? validationReason,
+    CsvMetadata? metadata,
   }) {
     return Measurement(
       id: id ?? this.id,
@@ -62,6 +78,7 @@ class Measurement {
       samples: samples ?? this.samples,
       validationStatus: validationStatus ?? this.validationStatus,
       validationReason: validationReason ?? this.validationReason,
+      metadata: metadata ?? this.metadata,
     );
   }
 

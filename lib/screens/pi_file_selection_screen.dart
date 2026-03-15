@@ -1,8 +1,5 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_email_sender/flutter_email_sender.dart';
-import 'package:path_provider/path_provider.dart';
 import '../providers/providers.dart';
 import '../services/services.dart';
 import '../utils/formatters.dart';
@@ -95,7 +92,7 @@ class _PiFileSelectionScreenState extends ConsumerState<PiFileSelectionScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: ElevatedButton.icon(
-                  onPressed: _isLoading ? null : _loadSelectedAndMail,
+                  onPressed: _isLoading ? null : _loadSelected,
                   icon: _isLoading
                       ? const SizedBox(
                           width: 20,
@@ -106,7 +103,7 @@ class _PiFileSelectionScreenState extends ConsumerState<PiFileSelectionScreen> {
                   label: Text(
                     _isLoading
                         ? 'Wird geladen...'
-                        : '${_selectedFiles.length} Messung(en) laden & per Mail senden',
+                        : '${_selectedFiles.length} Messung(en) laden',
                   ),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
@@ -203,46 +200,15 @@ class _PiFileSelectionScreenState extends ConsumerState<PiFileSelectionScreen> {
     });
   }
 
-  Future<void> _loadSelectedAndMail() async {
+  Future<void> _loadSelected() async {
     setState(() => _isLoading = true);
 
     try {
       final service = ref.read(measurementServiceProvider);
       final selectedFileInfos = _files.where((f) => _selectedFiles.contains(f.filename)).toList();
 
-      // Download selected files and save CSVs to temp for email
-      final tempDir = await getTemporaryDirectory();
-      final csvPaths = <String>[];
-
-      for (final file in selectedFileInfos) {
-        final content = await service.piConnection.downloadFile(file.filename);
-        if (content != null) {
-          final tempFile = File('${tempDir.path}/${file.filename}');
-          await tempFile.writeAsString(content);
-          csvPaths.add(tempFile.path);
-        }
-      }
-
-      // Load into app
       final count = await service.loadSelectedFromPi(selectedFileInfos);
       ref.read(measurementsProvider.notifier).refresh();
-
-      // Send backup email with CSVs
-      if (csvPaths.isNotEmpty) {
-        try {
-          final date = Formatters.formatDate(DateTime.now());
-          final email = Email(
-            subject: 'Prezio Messdaten - $date - ${csvPaths.length} Datei(en)',
-            body: 'Anbei die Rohdaten von ${csvPaths.length} Messung(en).\n\n'
-                'Datum: $date\n'
-                '---\nGesendet mit Prezio App',
-            attachmentPaths: csvPaths,
-          );
-          await FlutterEmailSender.send(email);
-        } catch (e) {
-          // Mail app might not be available - continue anyway
-        }
-      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

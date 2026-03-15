@@ -17,21 +17,19 @@ class SendProtocolScreen extends ConsumerStatefulWidget {
 }
 
 class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
-  bool _isGenerating = false;
-  bool _includeRawData = true;
-  String? _pdfPath;
-  String? _csvPath;
+  bool _isProcessing = true;
+  bool _isSaved = false;
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _generatePdf();
+    _generateAndSave();
   }
 
-  Future<void> _generatePdf() async {
+  Future<void> _generateAndSave() async {
     setState(() {
-      _isGenerating = true;
+      _isProcessing = true;
       _error = null;
     });
 
@@ -39,22 +37,21 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
       final pdfGenerator = ref.read(pdfGeneratorProvider);
       final pdfPath = await pdfGenerator.generateProtocolPdf(widget.protocolData);
 
-      if (_includeRawData) {
-        final measurementService = ref.read(measurementServiceProvider);
-        final csvContent = measurementService.exportToCsv(widget.protocolData.measurement);
-        final emailService = ref.read(emailServiceProvider);
-        final csvPath = await emailService.saveCsvToTemp(
-          csvContent,
-          'messdaten_${widget.protocolData.measurement.filename}',
-        );
-        setState(() => _csvPath = csvPath);
-      }
+      final measurementService = ref.read(measurementServiceProvider);
+      final csvContent = measurementService.exportToCsv(widget.protocolData.measurement);
 
-      setState(() => _pdfPath = pdfPath);
+      final storageService = ref.read(protocolStorageProvider);
+      await storageService.saveProtocol(
+        pdfPath: pdfPath,
+        csvContent: csvContent,
+        protocolData: widget.protocolData,
+      );
+
+      setState(() => _isSaved = true);
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
-      setState(() => _isGenerating = false);
+      setState(() => _isProcessing = false);
     }
   }
 
@@ -62,7 +59,7 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Protokoll senden'),
+        title: const Text('Protokoll speichern'),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -72,15 +69,11 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
             _buildSummaryCard(),
             const SizedBox(height: 16),
             _buildStatusCard(),
-            const SizedBox(height: 16),
-            _buildOptionsCard(),
             const SizedBox(height: 24),
-            _buildSendButton(),
-            const SizedBox(height: 16),
             OutlinedButton.icon(
               onPressed: () => Navigator.popUntil(context, (route) => route.isFirst),
               icon: const Icon(Icons.home),
-              label: const Text('Zurück zum Start'),
+              label: const Text('Zurueck zum Start'),
             ),
           ],
         ),
@@ -114,7 +107,7 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
                             ),
                       ),
                       Text(
-                        widget.protocolData.passed ? 'Prüfung bestanden' : 'Prüfung nicht bestanden',
+                        widget.protocolData.passed ? 'Pruefung bestanden' : 'Pruefung nicht bestanden',
                         style: TextStyle(
                           color: widget.protocolData.passed ? Colors.green : Colors.red,
                           fontWeight: FontWeight.w500,
@@ -130,7 +123,7 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
             _buildSummaryRow('Projekt', widget.protocolData.projectName),
             _buildSummaryRow('Datum', Formatters.formatDate(widget.protocolData.measurement.startTime)),
             _buildSummaryRow('Monteur', widget.protocolData.technicianName),
-            _buildSummaryRow('Prüfdruck', Formatters.formatPressureWithUnit(widget.protocolData.testPressure)),
+            _buildSummaryRow('Pruefdruck', Formatters.formatPressureWithUnit(widget.protocolData.testPressure)),
             _buildSummaryRow('Dauer', widget.protocolData.testDuration),
           ],
         ),
@@ -140,7 +133,7 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
 
   Widget _buildSummaryRow(String label, String value) {
     if (value.isEmpty) return const SizedBox.shrink();
-    
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -161,13 +154,13 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'PDF-Status',
+              'Speicher-Status',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
             ),
             const SizedBox(height: 16),
-            if (_isGenerating)
+            if (_isProcessing)
               const Row(
                 children: [
                   SizedBox(
@@ -176,7 +169,7 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   ),
                   SizedBox(width: 12),
-                  Text('PDF wird erstellt...'),
+                  Text('PDF wird erstellt und gespeichert...'),
                 ],
               )
             else if (_error != null)
@@ -192,88 +185,58 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
                   ),
                 ],
               )
-            else if (_pdfPath != null)
-              const Row(
+            else if (_isSaved)
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.check_circle, color: Colors.green),
-                  SizedBox(width: 12),
-                  Text('PDF erfolgreich erstellt'),
+                  const Row(
+                    children: [
+                      Icon(Icons.check_circle, color: Colors.green),
+                      SizedBox(width: 12),
+                      Text('Protokoll erfolgreich gespeichert'),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.folder, color: Colors.grey[600]),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Gespeicherte Dateien:',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w500,
+                                  color: Colors.grey[700],
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'PDF + CSV + Metadaten',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
           ],
         ),
       ),
     );
-  }
-
-  Widget _buildOptionsCard() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Anhänge',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-            const SizedBox(height: 8),
-            CheckboxListTile(
-              value: true,
-              onChanged: null,
-              title: const Text('Druckprotokoll (PDF)'),
-              secondary: const Icon(Icons.picture_as_pdf, color: Colors.red),
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-            ),
-            CheckboxListTile(
-              value: _includeRawData,
-              onChanged: (value) {
-                setState(() => _includeRawData = value ?? false);
-                if (value == true && _csvPath == null) {
-                  _generatePdf();
-                }
-              },
-              title: const Text('Rohdaten (CSV)'),
-              secondary: const Icon(Icons.table_chart, color: Colors.green),
-              dense: true,
-              contentPadding: EdgeInsets.zero,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSendButton() {
-    return ElevatedButton.icon(
-      onPressed: (_pdfPath != null && !_isGenerating) ? _sendEmail : null,
-      icon: const Icon(Icons.email),
-      label: const Text('Per E-Mail senden'),
-      style: ElevatedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-      ),
-    );
-  }
-
-  Future<void> _sendEmail() async {
-    if (_pdfPath == null) return;
-
-    try {
-      final emailService = ref.read(emailServiceProvider);
-      await emailService.sendProtocol(
-        pdfPath: _pdfPath!,
-        csvPath: _includeRawData ? _csvPath : null,
-        protocolData: widget.protocolData,
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Fehler beim Öffnen der E-Mail-App: $e')),
-        );
-      }
-    }
   }
 }

@@ -32,6 +32,12 @@ class _SignatureScreenState extends ConsumerState<SignatureScreen> {
   bool _isFullScreen = false;
 
   @override
+  void initState() {
+    super.initState();
+    _signatureController.addListener(() => setState(() {}));
+  }
+
+  @override
   void dispose() {
     _signatureController.dispose();
     super.dispose();
@@ -58,8 +64,8 @@ class _SignatureScreenState extends ConsumerState<SignatureScreen> {
             const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: _signatureController.isNotEmpty ? _finalize : null,
-              icon: const Icon(Icons.send),
-              label: const Text('Protokoll erstellen & senden'),
+              icon: const Icon(Icons.save),
+              label: const Text('Protokoll erstellen & speichern'),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),

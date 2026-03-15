@@ -31,6 +31,8 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
   TestMedium _selectedMedium = TestMedium.air;
   ValidationResult? _validationResult;
 
+  bool get _hasLockedParams => widget.measurement.hasRecordingMetadata;
+
   @override
   void initState() {
     super.initState();
@@ -39,6 +41,12 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
     _authorController = TextEditingController();
     _technicianController = TextEditingController();
     _notesController = TextEditingController();
+
+    final meta = widget.measurement.metadata;
+    if (meta != null && meta.hasRecordingParams) {
+      _selectedPN = meta.pn!;
+      _selectedMedium = meta.medium == 'water' ? TestMedium.water : TestMedium.air;
+    }
     
     _loadStoredValues();
     _runValidation();
@@ -154,13 +162,9 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
               ),
               const SizedBox(height: 24),
               ElevatedButton.icon(
-                onPressed: (_validationResult?.valid ?? false) ? _continueToSignature : null,
+                onPressed: _continueToSignature,
                 icon: const Icon(Icons.draw),
-                label: Text(
-                  (_validationResult?.valid ?? false)
-                      ? 'Weiter zur Unterschrift'
-                      : 'Validierung nicht bestanden',
-                ),
+                label: const Text('Weiter zur Unterschrift'),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
@@ -217,9 +221,15 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
   Widget _buildPNDropdown() {
     return DropdownButtonFormField<int>(
       initialValue: _selectedPN,
-      decoration: const InputDecoration(
+      decoration: InputDecoration(
         labelText: 'Betriebsdruck (PN)',
-        prefixIcon: Icon(Icons.compress),
+        prefixIcon: const Icon(Icons.compress),
+        suffixIcon: _hasLockedParams
+            ? const Tooltip(
+                message: 'Bei Aufzeichnungsstart festgelegt',
+                child: Icon(Icons.lock, size: 18),
+              )
+            : null,
       ),
       items: ValidationService.pnValues.map((pn) {
         return DropdownMenuItem(
@@ -227,21 +237,29 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
           child: Text('PN $pn'),
         );
       }).toList(),
-      onChanged: (value) {
-        if (value != null) {
-          setState(() => _selectedPN = value);
-          _runValidation();
-        }
-      },
+      onChanged: _hasLockedParams
+          ? null
+          : (value) {
+              if (value != null) {
+                setState(() => _selectedPN = value);
+                _runValidation();
+              }
+            },
     );
   }
 
   Widget _buildMediumDropdown() {
     return DropdownButtonFormField<TestMedium>(
       initialValue: _selectedMedium,
-      decoration: const InputDecoration(
+      decoration: InputDecoration(
         labelText: 'Medium',
-        prefixIcon: Icon(Icons.water_drop),
+        prefixIcon: const Icon(Icons.water_drop),
+        suffixIcon: _hasLockedParams
+            ? const Tooltip(
+                message: 'Bei Aufzeichnungsstart festgelegt',
+                child: Icon(Icons.lock, size: 18),
+              )
+            : null,
       ),
       items: TestMedium.values.map((medium) {
         return DropdownMenuItem(
@@ -249,12 +267,14 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
           child: Text(medium.displayName),
         );
       }).toList(),
-      onChanged: (value) {
-        if (value != null) {
-          setState(() => _selectedMedium = value);
-          _runValidation();
-        }
-      },
+      onChanged: _hasLockedParams
+          ? null
+          : (value) {
+              if (value != null) {
+                setState(() => _selectedMedium = value);
+                _runValidation();
+              }
+            },
     );
   }
 

@@ -22,6 +22,10 @@ final validationServiceProvider = Provider<ValidationService>((ref) {
   return ValidationService();
 });
 
+final protocolStorageProvider = Provider<ProtocolStorageService>((ref) {
+  return ProtocolStorageService();
+});
+
 final measurementsProvider = StateNotifierProvider<MeasurementsNotifier, List<Measurement>>((ref) {
   final service = ref.watch(measurementServiceProvider);
   return MeasurementsNotifier(service);

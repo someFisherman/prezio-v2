@@ -75,3 +75,14 @@ ios/Runner/GeneratedPluginRegistrant.*
 # Environment
 .env
 .env.*
+
+# Measurement data (CSV)
+pc_recorder/data/
+pi_recorder/data/
+dummy_server/data/*.csv
+!dummy_server/data/.gitkeep
+
+# Python virtual environments
+pi_recorder/venv/
+pc_recorder/venv/
+__pycache__/

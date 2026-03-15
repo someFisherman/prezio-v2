@@ -7,10 +7,13 @@ class CsvParserService {
 
   Measurement? parseFromString(String csvContent, {String filename = 'unknown.csv'}) {
     try {
+      final metadata = _parseMetadataHeaders(csvContent);
+      final csvWithoutComments = _stripCommentLines(csvContent);
+
       final lines = const CsvToListConverter(
         fieldDelimiter: ',',
         eol: '\n',
-      ).convert(csvContent);
+      ).convert(csvWithoutComments);
 
       if (lines.length < 2) {
         return null;
@@ -49,10 +52,53 @@ class CsvParserService {
         duration: duration,
         samples: samples,
         validationStatus: ValidationStatus.pending,
+        metadata: metadata,
       );
     } catch (e) {
       return null;
     }
+  }
+
+  CsvMetadata? _parseMetadataHeaders(String csvContent) {
+    String? name;
+    int? pn;
+    String? medium;
+    double? intervalS;
+    bool foundAny = false;
+
+    for (final line in csvContent.split('\n')) {
+      final trimmed = line.trim();
+      if (!trimmed.startsWith('#')) break;
+
+      final colonIdx = trimmed.indexOf(':');
+      if (colonIdx < 0) continue;
+
+      final key = trimmed.substring(1, colonIdx).trim().toLowerCase();
+      final value = trimmed.substring(colonIdx + 1).trim();
+
+      switch (key) {
+        case 'name':
+          name = value;
+          foundAny = true;
+        case 'pn':
+          pn = int.tryParse(value);
+          foundAny = true;
+        case 'medium':
+          medium = value;
+          foundAny = true;
+        case 'interval':
+          intervalS = double.tryParse(value);
+          foundAny = true;
+      }
+    }
+
+    return foundAny ? CsvMetadata(name: name, pn: pn, medium: medium, intervalS: intervalS) : null;
+  }
+
+  String _stripCommentLines(String csvContent) {
+    final lines = csvContent.split('\n');
+    final dataLines = lines.where((l) => !l.trimLeft().startsWith('#'));
+    return dataLines.join('\n');
   }
 
   bool _isValidHeader(List<dynamic> header) {

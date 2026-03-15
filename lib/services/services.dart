@@ -5,3 +5,4 @@ export 'storage_service.dart';
 export 'email_service.dart';
 export 'pdf_generator_service.dart';
 export 'validation_service.dart';
+export 'protocol_storage_service.dart';
