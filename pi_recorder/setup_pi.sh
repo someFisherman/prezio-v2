@@ -1,9 +1,12 @@
 #!/bin/bash
 # ============================================================
-# Prezio Pi Recorder - Setup Script
+# Prezio Pi Recorder - Setup Script (Bookworm / NetworkManager)
 #
 # Configures the Raspberry Pi as a WiFi Access Point and
 # installs the Prezio recorder as a systemd service.
+#
+# Compatible with: Raspberry Pi OS Bookworm (64-bit Lite)
+# Uses: NetworkManager (nmcli) instead of hostapd/dhcpcd
 #
 # Usage: sudo bash setup_pi.sh
 # ============================================================
@@ -30,75 +33,63 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # ------ System packages ------
-echo "[1/6] Installing system packages..."
+echo "[1/5] Installing system packages..."
 apt-get update -qq
-apt-get install -y -qq hostapd dnsmasq python3 python3-pip python3-venv
+apt-get install -y -qq python3 python3-pip python3-venv
 
 # ------ Python environment ------
-echo "[2/6] Setting up Python environment..."
+echo "[2/5] Setting up Python environment..."
 VENV_DIR="$SCRIPT_DIR/venv"
 if [ ! -d "$VENV_DIR" ]; then
     python3 -m venv "$VENV_DIR"
 fi
 "$VENV_DIR/bin/pip" install --quiet -r "$SCRIPT_DIR/requirements.txt"
 
-# ------ WiFi Access Point ------
-echo "[3/6] Configuring WiFi Access Point..."
+# ------ WiFi Access Point via NetworkManager ------
+echo "[3/5] Configuring WiFi Access Point (NetworkManager)..."
 
-systemctl stop hostapd 2>/dev/null || true
-systemctl stop dnsmasq 2>/dev/null || true
+# Remove any existing prezio AP connection
+nmcli connection delete prezio-ap 2>/dev/null || true
 
-cat > /etc/hostapd/hostapd.conf << EOF
-interface=wlan0
-driver=nl80211
-ssid=$SSID
-hw_mode=g
-channel=7
-wmm_enabled=0
-macaddr_acl=0
-auth_algs=1
-ignore_broadcast_ssid=0
-wpa=2
-wpa_passphrase=$PASSPHRASE
-wpa_key_mgmt=WPA-PSK
-rsn_pairwise=CCMP
-EOF
+# Remove any existing WiFi connections on wlan0 to avoid conflicts
+for conn in $(nmcli -t -f NAME,DEVICE connection show | grep ":wlan0" | cut -d: -f1); do
+    echo "  Removing existing connection: $conn"
+    nmcli connection delete "$conn" 2>/dev/null || true
+done
 
-if ! grep -q '^DAEMON_CONF="/etc/hostapd/hostapd.conf"' /etc/default/hostapd 2>/dev/null; then
-    echo 'DAEMON_CONF="/etc/hostapd/hostapd.conf"' >> /etc/default/hostapd
-fi
+# Create the AP connection
+nmcli connection add \
+    type wifi \
+    ifname wlan0 \
+    con-name prezio-ap \
+    autoconnect yes \
+    ssid "$SSID" \
+    wifi.mode ap \
+    wifi.band bg \
+    wifi.channel 7 \
+    ipv4.method shared \
+    ipv4.addresses "${PI_IP}/24" \
+    wifi-sec.key-mgmt wpa-psk \
+    wifi-sec.psk "$PASSPHRASE"
 
-# ------ Static IP for wlan0 ------
-echo "[4/6] Configuring static IP..."
+# Activate immediately
+nmcli connection up prezio-ap
 
-if ! grep -q "interface wlan0" /etc/dhcpcd.conf 2>/dev/null; then
-    cat >> /etc/dhcpcd.conf << EOF
+echo "  AP active: $SSID on $PI_IP"
 
-# Prezio Pi Recorder - Static IP for AP
-interface wlan0
-    static ip_address=${PI_IP}/24
-    nohook wpa_supplicant
-EOF
-fi
-
-# ------ DHCP Server (dnsmasq) ------
-echo "[5/6] Configuring DHCP server..."
-
-cat > /etc/dnsmasq.d/prezio.conf << EOF
-interface=wlan0
-dhcp-range=192.168.4.10,192.168.4.50,255.255.255.0,24h
-domain=local
-address=/prezio.local/$PI_IP
-EOF
+# ------ Data directory ------
+echo "[4/5] Creating data directory..."
+mkdir -p "$SCRIPT_DIR/data"
+chown -R pi:pi "$SCRIPT_DIR/data" 2>/dev/null || true
 
 # ------ Systemd Service ------
-echo "[6/6] Installing systemd service..."
+echo "[5/5] Installing systemd service..."
 
 cat > /etc/systemd/system/prezio-recorder.service << EOF
 [Unit]
 Description=Prezio Pi Recorder
-After=network.target hostapd.service
-Wants=hostapd.service
+After=network-online.target NetworkManager.service
+Wants=network-online.target
 
 [Service]
 Type=simple
@@ -114,22 +105,31 @@ StandardError=journal
 WantedBy=multi-user.target
 EOF
 
-# ------ Enable services ------
-systemctl unmask hostapd
-systemctl enable hostapd
-systemctl enable dnsmasq
 systemctl daemon-reload
 systemctl enable prezio-recorder
+systemctl start prezio-recorder
+
+# Verify service started
+sleep 2
+if systemctl is-active --quiet prezio-recorder; then
+    echo "  Service running OK"
+else
+    echo "  WARNING: Service may not have started. Check: journalctl -u prezio-recorder"
+fi
 
 echo ""
 echo "=============================="
 echo "Setup complete!"
 echo ""
-echo "Reboot to activate everything:"
-echo "  sudo reboot"
+echo "WiFi AP is already active:"
+echo "  SSID:     $SSID"
+echo "  Password: $PASSPHRASE"
+echo "  IP:       $PI_IP"
+echo "  HTTP API: http://$PI_IP:8080"
 echo ""
-echo "After reboot:"
-echo "  - WiFi AP: $SSID (password: $PASSPHRASE)"
-echo "  - HTTP API: http://$PI_IP:8080"
-echo "  - Service logs: journalctl -u prezio-recorder -f"
+echo "Service logs: journalctl -u prezio-recorder -f"
+echo ""
+echo "To reconnect via SSH after reboot:"
+echo "  1. Connect to WiFi '$SSID'"
+echo "  2. ssh pi@$PI_IP"
 echo "=============================="
