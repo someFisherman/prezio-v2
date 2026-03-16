@@ -89,3 +89,10 @@ __pycache__/
 
 # Original-Bilder
 foryou/
+
+# PrezioImager build artifacts
+pi_recorder/PrezioImager.exe
+pi_recorder/.flash_cache/
+pi_recorder/dist/
+pi_recorder/build/
+pi_recorder/*.spec
