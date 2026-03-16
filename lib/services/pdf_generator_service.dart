@@ -1,8 +1,9 @@
+import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
-import 'dart:io';
 import '../models/models.dart';
 import '../utils/formatters.dart';
 
@@ -55,35 +56,14 @@ class PdfGeneratorService {
       pdf.addPage(
         pw.Page(
           pageFormat: PdfPageFormat.a4,
-          margin: const pw.EdgeInsets.all(50),
-          build: (context) => pw.Column(
-            crossAxisAlignment: pw.CrossAxisAlignment.start,
-            children: [
-              _buildHeader(logo),
-              pw.SizedBox(height: 20),
-              pw.Text(
-                'Druckverlauf',
-                style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
-              ),
-              pw.SizedBox(height: 8),
-              pw.Text(
-                'Objekt: ${data.objectName.isNotEmpty ? data.objectName : "-"}  |  '
-                'Datum: ${Formatters.formatDateTime(DateTime.now())}  |  '
-                'Dauer: ${data.testDuration}',
-                style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
-              ),
-              pw.SizedBox(height: 30),
-              pw.Center(
-                child: pw.Image(
-                  pw.MemoryImage(data.chartImage!),
-                  width: 480,
-                  height: 320,
-                  fit: pw.BoxFit.contain,
-                ),
-              ),
-              pw.Spacer(),
-              _buildFooter(),
-            ],
+          margin: const pw.EdgeInsets.all(40),
+          build: (context) => pw.Center(
+            child: pw.Image(
+              pw.MemoryImage(data.chartImage!),
+              width: 500,
+              height: 350,
+              fit: pw.BoxFit.contain,
+            ),
           ),
         ),
       );
@@ -315,58 +295,50 @@ class PdfGeneratorService {
         pw.Row(
           crossAxisAlignment: pw.CrossAxisAlignment.end,
           children: [
-            pw.Expanded(
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text(
-                    'Monteur:',
-                    style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                  ),
-                  pw.SizedBox(height: 4),
-                  if (data.signature != null)
-                    pw.Image(pw.MemoryImage(data.signature!), width: 200, height: 80)
-                  else
-                    pw.Container(
-                      width: 200,
-                      decoration: const pw.BoxDecoration(
-                        border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5)),
-                      ),
-                      child: pw.SizedBox(height: 60),
-                    ),
-                  pw.SizedBox(height: 4),
-                  pw.Text(techName, style: const pw.TextStyle(fontSize: 10)),
-                ],
-              ),
+            _buildSignatureBlock(
+              hasSignature: data.signature != null,
+              signature: data.signature,
+              name: techName,
             ),
             pw.SizedBox(width: 40),
-            pw.Expanded(
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.start,
-                children: [
-                  pw.Text(
-                    'Unterschrift:',
-                    style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-                  ),
-                  pw.SizedBox(height: 4),
-                  pw.Container(
-                    width: 200,
-                    decoration: const pw.BoxDecoration(
-                      border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5)),
-                    ),
-                    child: pw.SizedBox(height: 60),
-                  ),
-                  pw.SizedBox(height: 4),
-                  pw.Text(
-                    'Name:  ____________________________',
-                    style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600),
-                  ),
-                ],
-              ),
-            ),
+            _buildSignatureBlock(hasSignature: false, signature: null, name: ''),
           ],
         ),
       ],
+    );
+  }
+
+  pw.Widget _buildSignatureBlock({
+    required bool hasSignature,
+    Uint8List? signature,
+    required String name,
+  }) {
+    return pw.Expanded(
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            'Unterschrift:',
+            style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+          ),
+          pw.SizedBox(height: 4),
+          if (hasSignature && signature != null)
+            pw.Image(pw.MemoryImage(signature), width: 200, height: 70)
+          else
+            pw.Container(
+              width: 200,
+              decoration: const pw.BoxDecoration(
+                border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5)),
+              ),
+              child: pw.SizedBox(height: 55),
+            ),
+          pw.SizedBox(height: 4),
+          pw.Text(
+            'Name: ${name.isNotEmpty ? name : "____________________________"}',
+            style: const pw.TextStyle(fontSize: 10),
+          ),
+        ],
+      ),
     );
   }
 

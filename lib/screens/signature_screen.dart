@@ -29,6 +29,7 @@ class _SignatureScreenState extends ConsumerState<SignatureScreen> {
   );
 
   final GlobalKey _chartKey = GlobalKey();
+  final ScrollController _scrollController = ScrollController();
   bool _isFullScreen = false;
 
   @override
@@ -40,6 +41,7 @@ class _SignatureScreenState extends ConsumerState<SignatureScreen> {
   @override
   void dispose() {
     _signatureController.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -54,6 +56,7 @@ class _SignatureScreenState extends ConsumerState<SignatureScreen> {
         title: const Text('Unterschrift'),
       ),
       body: SingleChildScrollView(
+        controller: _scrollController,
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -92,11 +95,12 @@ class _SignatureScreenState extends ConsumerState<SignatureScreen> {
             const SizedBox(height: 16),
             RepaintBoundary(
               key: _chartKey,
-              child: Container(
-                color: Colors.white,
+              child: SizedBox(
+                width: 400,
+                height: 300,
                 child: PressureChart(
                   measurement: widget.protocolData.measurement,
-                  height: 200,
+                  height: 300,
                 ),
               ),
             ),
@@ -282,17 +286,27 @@ class _SignatureScreenState extends ConsumerState<SignatureScreen> {
   }
 
   Future<Uint8List?> _captureChart() async {
-    for (int attempt = 0; attempt < 3; attempt++) {
+    await _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+    await Future.delayed(const Duration(milliseconds: 400));
+
+    for (int attempt = 0; attempt < 5; attempt++) {
       try {
-        await Future.delayed(Duration(milliseconds: 200 + attempt * 300));
+        await Future.delayed(Duration(milliseconds: 150 + attempt * 200));
 
         final boundary = _chartKey.currentContext?.findRenderObject()
             as RenderRepaintBoundary?;
         if (boundary == null || boundary.debugNeedsPaint) continue;
 
-        final image = await boundary.toImage(pixelRatio: 3.0);
+        final image = await boundary.toImage(pixelRatio: 2.0);
         final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-        if (byteData != null) return byteData.buffer.asUint8List();
+        if (byteData != null) {
+          final bytes = byteData.buffer.asUint8List();
+          if (bytes.length > 100) return bytes;
+        }
       } catch (_) {}
     }
     return null;
