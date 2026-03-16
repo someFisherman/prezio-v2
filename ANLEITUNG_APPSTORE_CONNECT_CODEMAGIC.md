@@ -222,9 +222,11 @@ publishing:
 | Problem | Lösung |
 |--------|--------|
 | "Key not found" | API Key in Codemagic richtig hochgeladen? Issuer ID + Key ID prüfen |
-| "No matching provisioning profile" | Bundle ID `ch.soleco.prezioV2` im Developer Portal angelegt? |
+| "No matching provisioning profile" | Bundle ID `ch.soleco.prezioV2` im Developer Portal angelegt? App-Store-Provisioning-Profile erstellt und in Codemagic hochgeladen? |
 | "Certificate not in profile" | Zertifikat und Provisioning Profile müssen vom gleichen Team/Account stammen |
 | "Development Team required" | API Key in Codemagic verbunden? Code Signing Identities ausgefüllt? |
+| **Keine IPA in Codemagic** | Build-Logs prüfen: Schlägt "xcode-project use-profiles" oder "flutter build ipa" fehl? Provisioning Profile + Zertifikat in Codemagic hochgeladen? Workflow "iOS Build (Signed)" verwenden. |
+| **Keine IPA auf TestFlight** | 1) App in App Store Connect angelegt? 2) In Codemagic: App → Workflow → **Publishing** → **App Store Connect** hinzufügen, API Key verknüpfen, App ID eintragen. 3) Oder IPA manuell mit Transporter-App hochladen. |
 
 ---
 

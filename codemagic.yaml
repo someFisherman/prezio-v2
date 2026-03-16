@@ -58,9 +58,18 @@ workflows:
       
       - name: Build iOS IPA (signed)
         script: flutter build ipa --release
+      
+      - name: Copy IPA for artifacts
+        script: |
+          mkdir -p artifacts
+          if ls build/ios/ipa/*.ipa 1>/dev/null 2>&1; then
+            cp build/ios/ipa/*.ipa artifacts/Prezio.ipa
+          fi
+          ls -la build/ios/ipa/ || true
     
     artifacts:
       - build/ios/ipa/*.ipa
+      - artifacts/*.ipa
       - build/ios/iphoneos/Runner.app
     
     publishing:
@@ -70,7 +79,6 @@ workflows:
         notify:
           success: true
           failure: true
-
   # ==========================================
   # iOS Build (unsigned - Fallback ohne Signierung)
   # ==========================================
@@ -151,10 +159,19 @@ workflows:
       
       - name: Build iOS IPA (signed)
         script: flutter build ipa --release
+      
+      - name: Copy IPA for artifacts
+        script: |
+          mkdir -p artifacts
+          if ls build/ios/ipa/*.ipa 1>/dev/null 2>&1; then
+            cp build/ios/ipa/*.ipa artifacts/Prezio.ipa
+          fi
+          ls -la build/ios/ipa/ || true
     
     artifacts:
       - build/app/outputs/flutter-apk/*.apk
       - build/ios/ipa/*.ipa
+      - artifacts/*.ipa
     
     publishing:
       email:
