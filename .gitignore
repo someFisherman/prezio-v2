@@ -86,3 +86,6 @@ dummy_server/data/*.csv
 pi_recorder/venv/
 pc_recorder/venv/
 __pycache__/
+
+# Original-Bilder
+foryou/
