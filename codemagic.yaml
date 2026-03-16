@@ -65,10 +65,18 @@ workflows:
       - name: Set up code signing settings on Xcode project
         script: xcode-project use-profiles
       
+      - name: Fetch latest build number from TestFlight
+        script: |
+          LATEST=$(app-store-connect get-latest-testflight-build-number ch.soleco.prezioV2 || echo "0")
+          NEXT=$((LATEST + 1))
+          echo "TestFlight build: $LATEST -> next: $NEXT"
+          echo "BUILD_NUM=$NEXT" >> $CM_ENV
+      
       - name: Build iOS IPA (signed)
         script: |
           flutter build ipa --release \
-            --export-options-plist=/Users/builder/export_options.plist
+            --export-options-plist=/Users/builder/export_options.plist \
+            --build-number=$BUILD_NUM
       
       - name: Verify IPA exists
         script: |
@@ -176,10 +184,18 @@ workflows:
       - name: Set up code signing settings on Xcode project
         script: xcode-project use-profiles
       
+      - name: Fetch latest build number from TestFlight
+        script: |
+          LATEST=$(app-store-connect get-latest-testflight-build-number ch.soleco.prezioV2 || echo "0")
+          NEXT=$((LATEST + 1))
+          echo "TestFlight build: $LATEST -> next: $NEXT"
+          echo "BUILD_NUM=$NEXT" >> $CM_ENV
+      
       - name: Build iOS IPA (signed)
         script: |
           flutter build ipa --release \
-            --export-options-plist=/Users/builder/export_options.plist
+            --export-options-plist=/Users/builder/export_options.plist \
+            --build-number=$BUILD_NUM
     
     artifacts:
       - build/app/outputs/bundle/release/*.aab
