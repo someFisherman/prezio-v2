@@ -40,6 +40,8 @@ class _PlateauSegment {
   final int endIndex;
   final DateTime startTime;
   final DateTime endTime;
+  final double startPressure;
+  final double endPressure;
   final double maxPressure;
   final double minPressure;
 
@@ -48,13 +50,16 @@ class _PlateauSegment {
     required this.endIndex,
     required this.startTime,
     required this.endTime,
+    required this.startPressure,
+    required this.endPressure,
     required this.maxPressure,
     required this.minPressure,
   });
 
   Duration get duration => endTime.difference(startTime);
   double get durationHours => duration.inSeconds / 3600.0;
-  double get pressureDrop => maxPressure - minPressure;
+  /// Druckabfall = Anfangsdruck - Enddruck (positiv = Druck gesunken)
+  double get pressureDrop => (startPressure - endPressure).abs();
 }
 
 class ValidationService {
@@ -270,6 +275,8 @@ class ValidationService {
             endIndex: i - 1,
             startTime: samples[segStart].timestamp,
             endTime: samples[i - 1].timestamp,
+            startPressure: samples[segStart].pressureRounded,
+            endPressure: samples[i - 1].pressureRounded,
             maxPressure: segMax,
             minPressure: segMin,
           ));
@@ -277,7 +284,6 @@ class ValidationService {
           segMax = 0;
           segMin = double.infinity;
         }
-        // If gap broke us but we're still above threshold, start new segment
         if (aboveThreshold && gapBreak) {
           segStart = i;
           segMax = s.pressureRounded;
@@ -286,7 +292,6 @@ class ValidationService {
       }
     }
 
-    // Close last open segment
     if (segStart != null) {
       final last = samples.length - 1;
       segments.add(_PlateauSegment(
@@ -294,6 +299,8 @@ class ValidationService {
         endIndex: last,
         startTime: samples[segStart].timestamp,
         endTime: samples[last].timestamp,
+        startPressure: samples[segStart].pressureRounded,
+        endPressure: samples[last].pressureRounded,
         maxPressure: segMax,
         minPressure: segMin,
       ));
