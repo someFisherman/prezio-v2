@@ -8,4 +8,4 @@ export 'validation_service.dart';
 export 'protocol_storage_service.dart';
 export 'weather_service.dart';
 export 'nominatim_service.dart';
-export 'firebase_upload_service.dart';
+export 'supabase_upload_service.dart';

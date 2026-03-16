@@ -81,7 +81,7 @@ class _InternetCheckScreenState extends ConsumerState<InternetCheckScreen> {
   Future<void> _onConnected() async {
     setState(() => _fetchingWeather = true);
 
-    // Upload raw CSV to Firebase immediately (best-effort, don't block)
+    // Upload raw CSV to cloud immediately (best-effort, don't block)
     _uploadRawCsv();
 
     WeatherData? weatherData;
@@ -108,14 +108,14 @@ class _InternetCheckScreenState extends ConsumerState<InternetCheckScreen> {
 
   Future<void> _uploadRawCsv() async {
     try {
-      final firebaseService = ref.read(firebaseUploadServiceProvider);
-      if (!firebaseService.isConfigured) return;
+      final supabaseService = ref.read(supabaseUploadServiceProvider);
+      if (!supabaseService.isConfigured) return;
 
       final measurementService = ref.read(measurementServiceProvider);
       final csvContent = measurementService.exportToCsv(widget.measurement);
       final name = widget.measurement.metadata?.name ?? widget.measurement.filename;
 
-      await firebaseService.uploadRawMeasurement(
+      await supabaseService.uploadRawMeasurement(
         csvContent: csvContent,
         measurementName: name,
       );

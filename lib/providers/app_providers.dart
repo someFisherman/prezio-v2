@@ -34,8 +34,8 @@ final nominatimServiceProvider = Provider<NominatimService>((ref) {
   return NominatimService();
 });
 
-final firebaseUploadServiceProvider = Provider<FirebaseUploadService>((ref) {
-  return FirebaseUploadService();
+final supabaseUploadServiceProvider = Provider<SupabaseUploadService>((ref) {
+  return SupabaseUploadService();
 });
 
 final measurementsProvider = StateNotifierProvider<MeasurementsNotifier, List<Measurement>>((ref) {

@@ -6,6 +6,7 @@ import '../models/models.dart';
 import '../providers/providers.dart';
 import '../services/services.dart';
 import '../utils/formatters.dart';
+import '../widgets/widgets.dart';
 import 'signature_screen.dart';
 
 class ProtocolFormScreen extends ConsumerStatefulWidget {
@@ -210,6 +211,8 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
               _buildWeatherCard(),
               const SizedBox(height: 16),
               _buildValidationCard(),
+              const SizedBox(height: 16),
+              _buildChartCard(),
               const SizedBox(height: 16),
               _buildSectionCard(
                 'Bemerkungen',
@@ -566,6 +569,34 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
                 style: TextStyle(color: Colors.grey[700]),
               ),
             ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChartCard() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.show_chart, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(width: 8),
+                Text(
+                  'Druckverlauf',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            PressureChart(
+              measurement: widget.measurement,
+              height: 220,
+            ),
           ],
         ),
       ),

@@ -52,9 +52,9 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
       final folderName = localResult.folderPath.split('/').last.split('\\').last;
       setState(() => _savedPath = localResult.folderPath);
 
-      final firebaseService = ref.read(firebaseUploadServiceProvider);
-      if (firebaseService.isConfigured) {
-        final uploadResult = await firebaseService.uploadProtocol(
+      final supabaseService = ref.read(supabaseUploadServiceProvider);
+      if (supabaseService.isConfigured) {
+        final uploadResult = await supabaseService.uploadProtocol(
           pdfPath: pdfPath,
           csvContent: csvContent,
           protocolData: widget.protocolData,
@@ -248,8 +248,8 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
                   Expanded(
                     child: Text(
                       _cloudUploaded
-                          ? 'Firebase hochgeladen'
-                          : (_cloudError ?? 'Firebase nicht konfiguriert'),
+                          ? 'Cloud hochgeladen'
+                          : (_cloudError ?? 'Cloud nicht konfiguriert'),
                       style: TextStyle(
                         color: _cloudUploaded ? Colors.green : Colors.grey[600],
                         fontWeight: FontWeight.w500,
