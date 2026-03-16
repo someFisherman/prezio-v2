@@ -49,7 +49,7 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
   late TextEditingController _customRatioController;
   late TextEditingController _customGapController;
 
-  bool get _hasLockedParams => widget.measurement.hasRecordingMetadata;
+  
 
   @override
   void initState() {
@@ -530,15 +530,9 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
   Widget _buildPNDropdown() {
     return DropdownButtonFormField<int>(
       initialValue: _selectedPN,
-      decoration: InputDecoration(
+      decoration: const InputDecoration(
         labelText: 'Betriebsdruck (PN)',
-        prefixIcon: const Icon(Icons.compress),
-        suffixIcon: _hasLockedParams
-            ? const Tooltip(
-                message: 'Bei Aufzeichnungsstart festgelegt',
-                child: Icon(Icons.lock, size: 18),
-              )
-            : null,
+        prefixIcon: Icon(Icons.compress),
       ),
       items: TestProfile.pnValues.map((pn) {
         return DropdownMenuItem(
@@ -546,29 +540,21 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
           child: Text('PN $pn'),
         );
       }).toList(),
-      onChanged: _hasLockedParams
-          ? null
-          : (value) {
-              if (value != null) {
-                setState(() => _selectedPN = value);
-                _runValidation();
-              }
-            },
+      onChanged: (value) {
+        if (value != null) {
+          setState(() => _selectedPN = value);
+          _runValidation();
+        }
+      },
     );
   }
 
   Widget _buildMediumDropdown() {
     return DropdownButtonFormField<TestMedium>(
       initialValue: _selectedMedium,
-      decoration: InputDecoration(
+      decoration: const InputDecoration(
         labelText: 'Medium',
-        prefixIcon: const Icon(Icons.water_drop),
-        suffixIcon: _hasLockedParams
-            ? const Tooltip(
-                message: 'Bei Aufzeichnungsstart festgelegt',
-                child: Icon(Icons.lock, size: 18),
-              )
-            : null,
+        prefixIcon: Icon(Icons.water_drop),
       ),
       items: TestMedium.values.map((medium) {
         return DropdownMenuItem(
@@ -576,14 +562,12 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
           child: Text(medium.displayName),
         );
       }).toList(),
-      onChanged: _hasLockedParams
-          ? null
-          : (value) {
-              if (value != null) {
-                setState(() => _selectedMedium = value);
-                _runValidation();
-              }
-            },
+      onChanged: (value) {
+        if (value != null) {
+          setState(() => _selectedMedium = value);
+          _runValidation();
+        }
+      },
     );
   }
 
