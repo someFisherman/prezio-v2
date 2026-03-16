@@ -1,28 +1,35 @@
 workflows:
   # ==========================================
-  # Android APK Build (ohne Signierung)
+  # Android Build (signiert fuer Play Store)
   # ==========================================
   android-build:
-    name: Android Build
+    name: Android Build (Signed)
     max_build_duration: 30
     instance_type: mac_mini_m2
     environment:
       flutter: stable
       java: 17
+      android_signing:
+        - prezio_keystore
     scripts:
       - name: Get Flutter packages
         script: flutter pub get
       
-      - name: Build APK (Debug)
-        script: flutter build apk --debug
-      
-      - name: Build APK (Release - unsigned)
+      - name: Build AAB (Release - signed)
+        script: flutter build appbundle --release
+
+      - name: Build APK (Release - signed)
         script: flutter build apk --release
     
     artifacts:
+      - build/app/outputs/bundle/release/*.aab
       - build/app/outputs/flutter-apk/*.apk
     
     publishing:
+      google_play:
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        track: internal
+        submit_as_draft: true
       email:
         recipients:
           - gloognoe@gmail.com
@@ -157,8 +164,8 @@ workflows:
         script: flutter pub get
       
       # Android
-      - name: Build Android APK
-        script: flutter build apk --release
+      - name: Build Android AAB
+        script: flutter build appbundle --release
       
       # iOS
       - name: Install CocoaPods
@@ -175,7 +182,7 @@ workflows:
             --export-options-plist=/Users/builder/export_options.plist
     
     artifacts:
-      - build/app/outputs/flutter-apk/*.apk
+      - build/app/outputs/bundle/release/*.aab
       - build/ios/ipa/*.ipa
     
     publishing:

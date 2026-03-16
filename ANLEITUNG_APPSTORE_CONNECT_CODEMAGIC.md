@@ -274,4 +274,77 @@ Workflow **"iOS Build (Unsigned)"** starten. Wenn dieser eine IPA liefert, liegt
 
 ---
 
+# Google Play Store – Schritt-für-Schritt
+
+## GP-1: Keystore erstellen
+
+Auf deinem Rechner (einmalig):
+
+```bash
+keytool -genkey -v -keystore prezio-release.jks -storetype JKS \
+  -keyalg RSA -keysize 2048 -validity 10000 -alias prezio
+```
+
+- **Passwort** merken (Keystore-Passwort UND Key-Passwort)
+- **Alias:** `prezio`
+- Die Datei `prezio-release.jks` sicher aufbewahren (z.B. 1Password, USB-Stick)
+
+## GP-2: Keystore in Codemagic hochladen
+
+1. **Codemagic** → **Team settings** → **codemagic.yaml settings** → **Code signing identities**
+2. Tab **Android keystores** → **Add keystore**
+3. **Reference name:** `prezio_keystore` (genau so, steht in der codemagic.yaml)
+4. **Keystore file:** `prezio-release.jks` hochladen
+5. **Keystore password:** Dein Passwort
+6. **Key alias:** `prezio`
+7. **Key password:** Dein Passwort
+8. **Save**
+
+## GP-3: Google Play Console – App anlegen
+
+1. **https://play.google.com/console** → Anmelden (25 USD einmalig für Developer-Konto)
+2. **Alle Apps** → **App erstellen**
+3. **App-Name:** Prezio
+4. **Standardsprache:** Deutsch (Schweiz)
+5. **App oder Spiel:** App
+6. **Kostenlos oder kostenpflichtig:** wie gewünscht
+7. **Erstellen**
+
+## GP-4: Google Play – Internen Test einrichten
+
+1. In der App → **Testen** → **Interner Test**
+2. **Neuen Release erstellen**
+3. **App Signing:** Google Play empfiehlt "Von Google verwaltete Signierung" – akzeptieren
+4. Ersten AAB manuell hochladen (von Codemagic herunterladen)
+5. Release-Name und Release-Hinweise eingeben
+6. **Überprüfen und veröffentlichen**
+
+## GP-5: Automatisches Publishing (optional)
+
+Für automatisches Hochladen zu Google Play:
+
+1. **Google Cloud Console** → Projekt erstellen oder vorhandenes nutzen
+2. **APIs & Dienste** → **Google Play Android Developer API** aktivieren
+3. **Dienstkonto** erstellen → JSON-Schlüssel herunterladen
+4. **Google Play Console** → **Setup** → **API-Zugriff** → Dienstkonto verknüpfen (Release-Berechtigung)
+5. **Codemagic** → **Team settings** → **Environment variables**:
+   - Name: `GCLOUD_SERVICE_ACCOUNT_CREDENTIALS`
+   - Wert: Inhalt der JSON-Datei einfügen
+   - Gruppe: z.B. `google_play`
+   - **Secret** aktivieren
+
+Wenn dies konfiguriert ist, lädt Codemagic das AAB automatisch in den internen Test-Track hoch.
+
+Falls du das automatische Publishing noch nicht einrichten willst, kannst du den `google_play`-Block in der `codemagic.yaml` einfach auskommentieren und das AAB manuell hochladen.
+
+## GP-Checkliste
+
+- [ ] Keystore erstellt und sicher gespeichert
+- [ ] Keystore in Codemagic hochgeladen (Reference: `prezio_keystore`)
+- [ ] App in Google Play Console angelegt
+- [ ] Erster interner Test-Release erstellt
+- [ ] (Optional) Service Account für automatisches Publishing
+
+---
+
 *Stand: März 2026*
