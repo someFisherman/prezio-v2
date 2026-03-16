@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -25,6 +24,7 @@ class PdfGeneratorService {
     final pdf = pw.Document();
     final logo = await _loadLehmannLogo();
 
+    // Seite 1: Protokoll
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.a4,
@@ -48,10 +48,6 @@ class PdfGeneratorService {
             pw.SizedBox(height: 30),
             _buildResult(data),
             pw.SizedBox(height: 30),
-            if (data.chartImage != null) ...[
-              _buildChartSection(data.chartImage!),
-              pw.SizedBox(height: 30),
-            ],
             _buildSignatureSection(data),
             pw.Spacer(),
             _buildFooter(),
@@ -59,6 +55,45 @@ class PdfGeneratorService {
         ),
       ),
     );
+
+    // Seite 2: Druckverlauf-Kurve
+    if (data.chartImage != null) {
+      pdf.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(50),
+          build: (context) => pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              _buildHeader(logo),
+              pw.SizedBox(height: 20),
+              pw.Text(
+                'Druckverlauf',
+                style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold),
+              ),
+              pw.SizedBox(height: 8),
+              pw.Text(
+                'Objekt: ${data.objectName.isNotEmpty ? data.objectName : "-"}  |  '
+                'Datum: ${Formatters.formatDate(data.measurement.startTime)}  |  '
+                'Dauer: ${data.testDuration}',
+                style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
+              ),
+              pw.SizedBox(height: 30),
+              pw.Center(
+                child: pw.Image(
+                  pw.MemoryImage(data.chartImage!),
+                  width: 480,
+                  height: 320,
+                  fit: pw.BoxFit.contain,
+                ),
+              ),
+              pw.Spacer(),
+              _buildFooter(),
+            ],
+          ),
+        ),
+      );
+    }
 
     final tempDir = await getTemporaryDirectory();
     final timestamp = DateTime.now().millisecondsSinceEpoch;
@@ -267,22 +302,6 @@ class PdfGeneratorService {
                 ),
               )),
         ],
-      ],
-    );
-  }
-
-  pw.Widget _buildChartSection(Uint8List chartImage) {
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.Text(
-          'Druckverlauf:',
-          style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
-        ),
-        pw.SizedBox(height: 10),
-        pw.Center(
-          child: pw.Image(pw.MemoryImage(chartImage), width: 400, height: 180),
-        ),
       ],
     );
   }
