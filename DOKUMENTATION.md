@@ -1,6 +1,6 @@
 # Prezio v2 - Vollstaendige Dokumentation
 
-**Version:** 2.2.0  
+**Version:** 2.3.0  
 **Stand:** Maerz 2026  
 **Entwickelt fuer:** Soleco AG / Lehmann 2000, Zofingen  
 **Plattformen:** iOS, Android (Flutter)  
@@ -13,27 +13,30 @@
 1. [Uebersicht](#1-uebersicht)
 2. [Systemarchitektur](#2-systemarchitektur)
 3. [Flutter-App (Smartphone)](#3-flutter-app-smartphone)
-4. [Raspberry Pi Recorder](#4-raspberry-pi-recorder)
+4. [Prezio Recorder (Raspberry Pi)](#4-prezio-recorder-raspberry-pi)
 5. [Neues Geraet bauen (Pi Zero 2 W)](#5-neues-geraet-bauen-pi-zero-2-w)
-6. [OneDrive-Anbindung](#6-onedrive-anbindung)
+6. [Supabase Cloud-Speicher](#6-supabase-cloud-speicher)
 7. [Validierungslogik](#7-validierungslogik)
 8. [Dateistruktur & Code-Referenz](#8-dateistruktur--code-referenz)
 9. [Ablauf (End-to-End)](#9-ablauf-end-to-end)
 10. [Fehlerbehebung](#10-fehlerbehebung)
-11. [Cursor-Kontext (Prompt fuer neuen Chat)](#11-cursor-kontext-prompt-fuer-neuen-chat)
+11. [Branding & Logos](#11-branding--logos)
+12. [Cursor-Kontext (Prompt fuer neuen Chat)](#12-cursor-kontext-prompt-fuer-neuen-chat)
 
 ---
 
 ## 1. Uebersicht
 
-Prezio ist eine Druckpruefungs-App fuer die Sanitaerbranche. Ein Monteur schliesst einen KELLER LEO5 Drucksensor an eine Leitung an, der Sensor ist per USB-Seriell mit einem Raspberry Pi verbunden. Die App auf dem Smartphone steuert die Aufzeichnung ueber WiFi, laedt die Messdaten, validiert automatisch ob die Leitung dicht ist, erstellt ein PDF-Protokoll mit Unterschrift und laedt alles automatisch nach OneDrive hoch.
+Prezio ist eine Druckpruefungs-App fuer die Sanitaerbranche. Ein Monteur schliesst einen KELLER LEO5 Drucksensor an eine Leitung an, der Sensor ist per USB-Seriell mit einem **Prezio Recorder** (Raspberry Pi) verbunden. Die App auf dem Smartphone steuert die Aufzeichnung ueber WiFi, laedt die Messdaten, validiert automatisch ob die Leitung dicht ist, erstellt ein PDF-Protokoll mit Unterschrift und laedt alles automatisch nach **Supabase** hoch (kostenlos, keine Kreditkarte).
 
 ### Kernprinzipien
 
+- **Kein Login**: Die App wird durch Verbindung mit dem Prezio Recorder freigeschaltet (Secret Key ueber WiFi)
 - **Keine manuelle Manipulation**: PN (Betriebsdruck) und Medium (Luft/Wasser) werden bei Aufzeichnungsstart festgelegt und koennen nachtraeglich nicht geaendert werden
 - **Automatische Validierung**: Das System entscheidet ob die Messung gueltig ist, nicht der Monteur
-- **Automatische Ablage**: Protokolle werden ohne Benutzerinteraktion in OneDrive hochgeladen
+- **Automatische Ablage**: Protokolle werden ohne Benutzerinteraktion in Supabase hochgeladen
 - **Wetterdaten-Korrektur**: Aussentemperaturschwankungen werden bei der Toleranzberechnung beruecksichtigt
+- **Standort-Erkennung**: GPS + Nominatim (OpenStreetMap) fuer automatische und editierbare Ortsangabe
 
 ---
 
@@ -42,32 +45,44 @@ Prezio ist eine Druckpruefungs-App fuer die Sanitaerbranche. Ein Monteur schlies
 ```
 ┌──────────────────────┐     WiFi AP (192.168.4.1)     ┌──────────────────────┐
 │                      │◄──────────────────────────────►│                      │
-│   Raspberry Pi       │     HTTP REST API :8080        │   iPhone / Android   │
+│   Prezio Recorder    │     HTTP REST API :8080        │   iPhone / Android   │
 │   (Pi 4B / Zero 2 W) │                                │   Flutter App        │
 │                      │                                │                      │
-│   - WiFi Access Point│                                │   - Aufzeichnung     │
-│   - KELLER LEO5      │                                │     starten/stoppen  │
-│   - pi_recorder.py   │                                │   - CSV laden        │
-│   - CSV-Speicherung  │                                │   - Validierung      │
+│   - WiFi Access Point│                                │   - Auth via Key     │
+│   - KELLER LEO5      │                                │   - Aufzeichnung     │
+│   - pi_recorder.py   │                                │     starten/stoppen  │
+│   - CSV-Speicherung  │                                │   - CSV laden        │
+│   - Secret Key       │                                │   - Auto-Validierung │
 │   - HTTP API         │                                │   - PDF erstellen    │
-│                      │                                │   - OneDrive Upload  │
-└────────┬─────────────┘                                └──────────────────────┘
-         │ USB-Seriell                                           │
-    ┌────┴─────┐                                          ┌──────┴───────┐
-    │ KELLER   │                                          │  OneDrive    │
-    │ LEO5     │                                          │  (Microsoft  │
-    │ Sensor   │                                          │   Graph API) │
-    └──────────┘                                          └──────────────┘
+│                      │                                │   - Supabase Upload  │
+└────────┬─────────────┘                                └──────────┬───────────┘
+         │ USB-Seriell                                             │ HTTPS
+    ┌────┴─────┐                                          ┌────────┴────────┐
+    │ KELLER   │                                          │  Supabase       │
+    │ LEO5     │                                          │  (Postgres DB + │
+    │ Sensor   │                                          │   File Storage) │
+    └──────────┘                                          └─────────────────┘
+                                                                   │
+                                                          ┌────────┴────────┐
+                                                          │  Open-Meteo     │
+                                                          │  (Wetter-API)   │
+                                                          └─────────────────┘
+                                                                   │
+                                                          ┌────────┴────────┐
+                                                          │  Nominatim      │
+                                                          │  (Standort)     │
+                                                          └─────────────────┘
 ```
 
 ### Kommunikation
 
 | Verbindung | Protokoll | Details |
 |---|---|---|
-| Pi ↔ Sensor | USB-Seriell (9600 Baud) | KELLER Protokoll (CRC16), Adresse 1 |
-| Pi ↔ Smartphone | HTTP REST API | WiFi AP "Prezio-Recorder", IP 192.168.4.1:8080 |
-| Smartphone ↔ OneDrive | HTTPS | Microsoft Graph API, OAuth2 PKCE |
+| Recorder ↔ Sensor | USB-Seriell (9600 Baud) | KELLER Protokoll (CRC16), Adresse 1 |
+| Recorder ↔ Smartphone | HTTP REST API | WiFi AP "Prezio-Recorder", IP 192.168.4.1:8080 |
+| Smartphone ↔ Supabase | HTTPS REST API | Anon Key, kein Login noetig |
 | Smartphone ↔ Wetter-API | HTTPS | Open-Meteo (kostenlos, kein Key) |
+| Smartphone ↔ Nominatim | HTTPS | OpenStreetMap (kostenlos, kein Key) |
 
 ---
 
@@ -80,36 +95,62 @@ Prezio ist eine Druckpruefungs-App fuer die Sanitaerbranche. Ein Monteur schlies
 - **Charts:** fl_chart
 - **PDF:** pdf + printing
 - **Signature:** signature 5.5
-- **HTTP:** http (fuer Pi-API, OneDrive, Wetter)
-- **OAuth:** flutter_web_auth_2 (Microsoft Login)
-- **GPS:** geolocator (fuer Wetterdaten-Standort)
+- **HTTP:** http (fuer Recorder-API, Supabase, Wetter, Nominatim)
+- **GPS:** geolocator (fuer Standort + Wetterdaten)
 - **Crypto:** crypto (SHA-256 fuer CSV-Integritaet)
+- **Cloud:** Supabase (reine REST API, kein SDK)
 
 ### Screen-Flow
 
 ```
-HomeScreen
-  ├── PiRecordingScreen       (Aufzeichnung starten/stoppen)
-  ├── PiFileSelectionScreen   (Messung vom Pi waehlen → 1 antippen)
-  │     └── ProtocolFormScreen  (Projekt-Info, Auto-Validierung, Wetter)
-  │           └── SignatureScreen  (Unterschrift + Chart-Screenshot)
-  │                 └── SendProtocolScreen  (Speichern + OneDrive-Upload)
-  ├── MeasurementListScreen   (Alle geladenen Messungen)
-  │     └── MeasurementDetailScreen  (Details + Chart)
-  └── SettingsScreen          (Monteur, Pi-IP, OneDrive-Login)
+ConnectScreen (Kolibri-Logo, Recorder-Verbindung + Key-Auth)
+  └── RecorderScreen (Aufzeichnung starten/stoppen)
+        ├── [Aufzeichnung stoppen] → InternetCheckScreen
+        └── [Aufzeichnungen] → RecorderFileSelectionScreen (Messung waehlen)
+                                    └── InternetCheckScreen
+                                          └── ProtocolFormScreen (Projekt-Info, Standort,
+                                          │     Auto-Validierung, Wetter, Druckkurve)
+                                          └── SignatureScreen (Unterschrift + Chart)
+                                                └── SendProtocolScreen (Speichern + Supabase)
 ```
+
+**Wichtige Screens:**
+
+| Screen | Datei | Funktion |
+|---|---|---|
+| ConnectScreen | `connect_screen.dart` | Einstieg: Kolibri-Logo, pollt Recorder, holt Key |
+| RecorderScreen | `recorder_screen.dart` | Aufzeichnung starten/stoppen, "Aufzeichnungen"-Button |
+| RecorderFileSelectionScreen | `recorder_file_selection_screen.dart` | Einzelauswahl einer Messung vom Recorder |
+| InternetCheckScreen | `internet_check_screen.dart` | Reboot-Befehl an Recorder, Internet pruefen, fruehen CSV-Upload |
+| ProtocolFormScreen | `protocol_form_screen.dart` | Formular mit Standort (Nominatim), Wetter, Validierung, Druckkurve |
+| SignatureScreen | `signature_screen.dart` | Unterschrift + Chart-Vorschau |
+| SendProtocolScreen | `send_protocol_screen.dart` | Lokal speichern + Supabase Upload |
+| SettingsScreen | `settings_screen.dart` | Recorder-IP, Climartis-Logo |
+
+### Authentifizierung
+
+Es gibt **kein Login und kein Passwort**. Der Zugang zur App funktioniert so:
+
+1. App startet → ConnectScreen zeigt Kolibri-Logo
+2. Benutzer verbindet Handy mit WiFi "Prezio-Recorder"
+3. App pollt automatisch `/health` auf 192.168.4.1:8080
+4. Bei Erfolg: App ruft `/auth/key` ab → erhaelt Secret Key
+5. Key wird validiert → Zugang zum RecorderScreen
+
+Der Key wird bei jedem App-Start neu geholt. Ohne Recorder kein Zugang.
 
 ### Wichtige Services
 
 | Service | Datei | Aufgabe |
 |---|---|---|
-| PiConnectionService | `pi_connection_service.dart` | HTTP-Client fuer Pi-API |
+| RecorderConnectionService | `recorder_connection_service.dart` | HTTP-Client fuer Recorder-API inkl. Key + Reboot |
 | MeasurementService | `measurement_service.dart` | Messungen laden, verwalten, exportieren |
 | CsvParserService | `csv_parser_service.dart` | CSV parsen (inkl. Metadaten-Header) |
 | ValidationService | `validation_service.dart` | Druckpruefung validieren |
 | WeatherService | `weather_service.dart` | Wetterdaten von Open-Meteo holen |
-| OneDriveService | `onedrive_service.dart` | OAuth2 + Microsoft Graph Upload |
-| PdfGeneratorService | `pdf_generator_service.dart` | A4-PDF "Lehmann 2000" generieren |
+| NominatimService | `nominatim_service.dart` | Reverse Geocoding + Ortssuche (OpenStreetMap) |
+| SupabaseUploadService | `supabase_upload_service.dart` | REST-Upload zu Supabase (Tabellen + Storage) |
+| PdfGeneratorService | `pdf_generator_service.dart` | A4-PDF mit Lehmann-2000-Logo generieren |
 | ProtocolStorageService | `protocol_storage_service.dart` | Lokale Ordnerstruktur + Metadaten |
 | StorageService | `storage_service.dart` | SharedPreferences (Einstellungen) |
 
@@ -120,10 +161,11 @@ HomeScreen
 | Sample | `sample.dart` | index, timestamp, timestampUtc, pressureBar, temperatureC, pressureRounded, temperatureRounded |
 | Measurement | `measurement.dart` | id, filename, startTime, endTime, duration, samples[], validationStatus, metadata |
 | CsvMetadata | `measurement.dart` | name, pn, medium, intervalS |
-| ProtocolData | `protocol_data.dart` | measurement, objectName, projectName, author, nominalPressure, testMedium, testPressure, result, passed, technicianName, signature, chartImage, notes |
+| ProtocolData | `protocol_data.dart` | measurement, objectName, projectName, author, nominalPressure, testMedium, testPressure, result, passed, technicianName, signature, chartImage, notes, **location, latitude, longitude** |
 | TestMedium | `protocol_data.dart` | air (Faktor 1.1), water (Faktor 1.5) |
+| WeatherData | `weather_data.dart` | outdoorTempStart, outdoorTempEnd, minTemp, maxTemp, tempSwing, additionalTolerance |
 
-### CSV-Format (vom Pi)
+### CSV-Format (vom Recorder)
 
 ```csv
 # Name: Heizung OG
@@ -140,7 +182,7 @@ Die `#`-Zeilen enthalten Metadaten die bei Aufzeichnungsstart festgelegt werden.
 
 ---
 
-## 4. Raspberry Pi Recorder
+## 4. Prezio Recorder (Raspberry Pi)
 
 ### Hardware
 
@@ -156,25 +198,38 @@ Die `#`-Zeilen enthalten Metadaten die bei Aufzeichnungsstart festgelegt werden.
 - **NetworkManager** (nmcli) fuer WiFi Access Point
 - **systemd** fuer Auto-Start
 
-### Pi Recorder Script (`pi_recorder.py`)
+### Recorder Script (`pi_recorder.py`)
 
 Headless Python-Script das:
 1. Den KELLER LEO5 Sensor per USB-Seriell (9600 Baud) anspricht
 2. Messwerte (Druck P1, Temperatur TOB1) in 10-Sekunden-Zyklen aufzeichnet
 3. CSV-Dateien mit Metadaten-Headern in `./data/` speichert
 4. Eine HTTP REST API auf Port 8080 bereitstellt
+5. Einen **Secret Key** generiert und speichert (`/home/pi/prezio_key.txt`)
+6. Maximal **10 Messungen** speichert (aelteste wird automatisch geloescht)
 
 ### API-Endpunkte
 
 | Methode | Pfad | Beschreibung |
 |---|---|---|
+| `GET` | `/` | Status-Meldung "Prezio Recorder - HTTP API running" |
 | `GET` | `/health` | Sensor-Status, Seriennummer, Verbindung |
+| `GET` | `/auth/key` | Secret Key abrufen (App-Authentifizierung) |
 | `GET` | `/files` | Liste aller CSV-Dateien (Name, Groesse, Datum) |
 | `GET` | `/files/{name}` | CSV-Datei herunterladen |
 | `DELETE` | `/files/{name}` | CSV-Datei loeschen |
 | `POST` | `/recording/start` | Aufzeichnung starten (JSON: name, pn, medium, interval_s) |
 | `POST` | `/recording/stop` | Aufzeichnung stoppen |
 | `GET` | `/recording/status` | Status (laeuft?, Name, Dauer, Samples, letzte Werte) |
+| `POST` | `/reboot` | Recorder neustarten (1s Verzoegerung, dann `sudo reboot`) |
+
+### Secret Key
+
+Der Recorder generiert beim ersten Start automatisch einen Key:
+- SHA-256 Hash von "Prezio-Recorder-2026"
+- Gespeichert in `/home/pi/prezio_key.txt`
+- Wird ueber `/auth/key` an die App ausgeliefert
+- Die App prueft den Key bei jeder Verbindung
 
 ### WiFi Access Point
 
@@ -275,7 +330,7 @@ sudo reboot
 1. Auf dem Handy: WiFi "Prezio-Recorder" suchen und verbinden (Passwort: `prezio2026`)
 2. Im Browser oeffnen: `http://192.168.4.1:8080/health`
 3. Sollte JSON mit Sensor-Status zeigen
-4. In der Prezio-App: "Aufzeichnung starten / stoppen" → Sensor-Status pruefen
+4. In der Prezio-App: Kolibri-Logo erscheint → Verbindung wird automatisch hergestellt
 
 #### 5. Fertig!
 
@@ -306,61 +361,107 @@ Jedes Geraet ist unabhaengig. Bei mehreren Geraeten:
 
 ---
 
-## 6. OneDrive-Anbindung
+## 6. Supabase Cloud-Speicher
 
-### Funktionsweise
+### Warum Supabase?
 
-Die App nutzt die **Microsoft Graph API** um Protokolle direkt in OneDrive hochzuladen. Der Upload geschieht vollautomatisch nach dem Speichern - der Monteur bekommt davon nichts mit.
+- **Komplett kostenlos** (Free Tier: 500 MB Datenbank, 1 GB Storage)
+- **Keine Kreditkarte** noetig
+- **Kein Login am Handy** - alles fix hinterlegt mit Anon Key
+- **Buero-Zugang** ueber das Supabase Dashboard (Web-Browser)
+- **Kein SDK** noetig - reine HTTP REST API mit dem `http` Paket
 
-### Zielordner
+### Projekt-Daten
+
+| Einstellung | Wert |
+|---|---|
+| Supabase URL | `https://ndqisdqdhzeenvjkkuxd.supabase.co` |
+| Anon Key | In `lib/config/supabase_config.dart` hinterlegt |
+| Storage Bucket | `protokolle` |
+| Region | Central EU |
+
+### Datenbank-Tabellen
+
+#### Tabelle `rohdaten` (fruehe CSV-Uploads)
+
+Wird sofort hochgeladen sobald das Handy Internet hat (vor dem Protokoll).
+
+| Spalte | Typ | Beschreibung |
+|---|---|---|
+| `id` | int8 (PK) | Auto-Increment |
+| `created_at` | timestamptz | Zeitstempel (default: now()) |
+| `name` | text | Messungsname (vom Monteur) |
+| `csv` | text | Kompletter CSV-Inhalt |
+| `csv_sha256` | text | SHA-256 Hash (Integritaet) |
+
+#### Tabelle `protokolle` (fertige Protokolle)
+
+Wird nach dem vollstaendigen Protokoll-Flow hochgeladen.
+
+| Spalte | Typ | Beschreibung |
+|---|---|---|
+| `id` | int8 (PK) | Auto-Increment |
+| `created_at` | timestamptz | Zeitstempel |
+| `folder_name` | text | Ordnername (fuer Storage-Referenz) |
+| `version` | text | App-Version |
+| `object_name` | text | Objekt / Anlage |
+| `project` | text | Projektname |
+| `author` | text | Verfasser |
+| `technician` | text | Monteurname |
+| `location` | text | Standort (Adresse) |
+| `latitude` | float8 | GPS Breitengrad |
+| `longitude` | float8 | GPS Laengengrad |
+| `measurement_filename` | text | CSV-Dateiname |
+| `start_time` | text | Messbeginn (ISO 8601) |
+| `end_time` | text | Messende (ISO 8601) |
+| `duration_seconds` | int8 | Messdauer in Sekunden |
+| `sample_count` | int8 | Anzahl Messpunkte |
+| `nominal_pressure` | float8 | Nenndruck (PN) |
+| `test_medium` | text | Pruefmedium (air/water) |
+| `test_pressure` | float8 | Pruefdruck (bar) |
+| `passed` | bool | Pruefung bestanden? |
+| `result` | text | Ergebnis-Text |
+| `validation_reason` | text | Begruendung |
+| `csv_sha256` | text | CSV-Hash |
+| `pdf_path` | text | Pfad zum PDF in Storage |
+
+**RLS (Row Level Security) ist auf beiden Tabellen deaktiviert** - der Anon Key hat vollen Zugriff.
+
+### Storage Bucket `protokolle`
+
+Hier werden die echten Dateien (PDFs + CSVs) gespeichert:
 
 ```
-OneDrive
-└── Prezio
-    └── Protokolle
-        ├── Heizung_OG_2026-03-15/
-        │   ├── Druckprotokoll_15-03-2026_OK.pdf
-        │   ├── Messdaten.csv
-        │   └── metadata.json
-        └── Badezimmer_EG_2026-03-16/
-            ├── Druckprotokoll_16-03-2026_Nicht_OK.pdf
-            ├── Messdaten.csv
-            └── metadata.json
+protokolle/
+├── Heizung_OG_2026-03-15/
+│   ├── protokoll.pdf
+│   └── messdaten.csv
+├── Badezimmer_EG_2026-03-16/
+│   ├── protokoll.pdf
+│   └── messdaten.csv
 ```
 
-### Azure AD Einrichtung (einmalig)
+### Upload-Ablauf
 
-1. **portal.azure.com** oeffnen, mit Soleco-Konto anmelden
-2. "App-Registrierungen" suchen → "Neue Registrierung"
-3. Einstellungen:
-   - Name: `Prezio`
-   - Kontotypen: "Nur Konten in diesem Organisationsverzeichnis"
-   - Umleitungs-URI: Plattform **"Oeffentlicher Client/nativ"** → URI: `prezio://auth`
-4. **Anwendungs-ID (Client-ID)** kopieren
-5. Unter "API-Berechtigungen":
-   - "Berechtigung hinzufuegen" → Microsoft Graph → Delegiert → `Files.ReadWrite`
-   - "Administratorzustimmung erteilen" klicken
-6. Client-ID in `lib/utils/constants.dart` eintragen:
+1. **Frueh-Upload** (InternetCheckScreen): Sobald Internet vorhanden → CSV als Text in `rohdaten`-Tabelle
+2. **Protokoll-Upload** (SendProtocolScreen): Nach Unterschrift → PDF + CSV in Storage + Metadaten in `protokolle`-Tabelle
 
-```dart
-static const String azureClientId = 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx';
-```
+### Buero-Zugriff
 
-### Geraet einrichten (einmalig pro Handy)
+Das Buero greift ueber https://supabase.com/dashboard auf die Daten zu:
+- **Table Editor**: Alle Protokolle als Tabelle sehen, filtern, sortieren
+- **Storage**: PDFs und CSVs direkt herunterladen
+- **SQL Editor**: Eigene Abfragen (z.B. "Alle fehlgeschlagenen Pruefungen")
 
-1. App oeffnen → Einstellungen → "Mit Microsoft anmelden"
-2. Microsoft-Login im Browser erscheint → Mit Soleco-Konto anmelden
-3. Fertig! Token wird gespeichert, ab jetzt automatisch
+### Neues Supabase-Projekt einrichten (falls noetig)
 
-**Szenario A (empfohlen):** Admin loggt sich auf jedem Monteur-Handy mit dem gleichen Soleco-Konto ein. Alle Protokolle landen zentral in einem OneDrive.
-
-### Technische Details
-
-- **OAuth2 mit PKCE** (kein Client Secret noetig fuer Mobile Apps)
-- **Refresh Token** wird in SharedPreferences gespeichert
-- **Automatische Token-Erneuerung** bei jedem Upload
-- **Fallback**: Wenn Upload fehlschlaegt → lokal gespeichert, kein Datenverlust
-- **Upload-Limit**: Einzeldateien < 4 MB (fuer groessere: Resumable Upload noetig, aktuell nicht implementiert - reicht aber fuer PDFs und CSVs)
+1. https://supabase.com → Konto erstellen (GitHub oder E-Mail, keine Kreditkarte)
+2. "New Project" → Name, Region (Central EU), Passwort
+3. **Project Settings > API**: URL + Anon Key kopieren
+4. In `lib/config/supabase_config.dart` eintragen
+5. **Table Editor**: Tabellen `rohdaten` und `protokolle` erstellen (Spalten siehe oben)
+6. **RLS abschalten** auf beiden Tabellen
+7. **Storage**: Bucket `protokolle` erstellen
 
 ---
 
@@ -403,10 +504,12 @@ Wenn Aussen-Schwankung > 2°C:
 Gesamt-Toleranz = Basis-Toleranz + Zusatz-Toleranz
 ```
 
+Wetterdaten kommen von **Open-Meteo** (kostenlos, kein API-Key). Wenn kein Internet verfuegbar war, wird die Standard-Toleranz ohne Wetter-Anpassung verwendet.
+
 ### Pruefergebnis
 
 ```
-Fehler = |Enddruck - erwarteteDruck|
+Fehler = |Enddruck - erwarteterDruck|
 
 Wenn Fehler ≤ Toleranz → BESTANDEN (kein Leck)
 Wenn Fehler > Toleranz  → NICHT BESTANDEN (moegliche Leckage)
@@ -434,57 +537,63 @@ Verfuegbar: 6, 10, 16, 20, 25, 32, 40, 50, 63, 80, 100 bar
 ```
 prezio_v2/
 ├── lib/
-│   ├── main.dart                          # App-Einstiegspunkt
-│   ├── app.dart                           # MaterialApp + Theme
+│   ├── main.dart                          # App-Einstiegspunkt (kein Firebase mehr)
+│   ├── app.dart                           # MaterialApp + Theme → ConnectScreen
+│   │
+│   ├── config/
+│   │   └── supabase_config.dart           # Supabase URL + Anon Key + Bucket
 │   │
 │   ├── models/
 │   │   ├── models.dart                    # Barrel-Export
 │   │   ├── measurement.dart               # Measurement, CsvMetadata, ValidationStatus
 │   │   ├── sample.dart                    # Sample (Einzelmesswert)
-│   │   └── protocol_data.dart             # ProtocolData, TestMedium
+│   │   ├── protocol_data.dart             # ProtocolData, TestMedium
+│   │   └── weather_data.dart              # WeatherData
 │   │
 │   ├── screens/
 │   │   ├── screens.dart                   # Barrel-Export
-│   │   ├── home_screen.dart               # Dashboard
-│   │   ├── pi_recording_screen.dart       # Pi-Aufzeichnung steuern
-│   │   ├── pi_file_selection_screen.dart   # Messung vom Pi waehlen (Einzelauswahl)
-│   │   ├── protocol_form_screen.dart       # Protokoll-Formular + Validierung + Wetter
-│   │   ├── signature_screen.dart           # Unterschrift erfassen
-│   │   ├── send_protocol_screen.dart       # Speichern + OneDrive-Upload
-│   │   ├── measurement_list_screen.dart    # Messungsliste (Tabs)
-│   │   ├── measurement_detail_screen.dart  # Messungsdetails + Chart
-│   │   └── settings_screen.dart            # Einstellungen + OneDrive-Login
+│   │   ├── connect_screen.dart            # Einstieg: Kolibri, Recorder-Auth
+│   │   ├── recorder_screen.dart           # Aufzeichnung starten/stoppen
+│   │   ├── recorder_file_selection_screen.dart  # Messung vom Recorder waehlen
+│   │   ├── internet_check_screen.dart     # Internet pruefen, Reboot, Frueh-Upload
+│   │   ├── protocol_form_screen.dart      # Protokoll + Standort + Wetter + Kurve
+│   │   ├── signature_screen.dart          # Unterschrift + Chart
+│   │   ├── send_protocol_screen.dart      # Speichern + Supabase Upload
+│   │   ├── measurement_list_screen.dart   # Alle geladenen Messungen
+│   │   ├── measurement_detail_screen.dart # Messungsdetails + Chart
+│   │   └── settings_screen.dart           # Recorder-IP, Climartis-Logo
 │   │
 │   ├── services/
 │   │   ├── services.dart                  # Barrel-Export
-│   │   ├── pi_connection_service.dart      # HTTP-Client fuer Pi
-│   │   ├── measurement_service.dart        # Messungsverwaltung
-│   │   ├── csv_parser_service.dart         # CSV parsen/generieren
-│   │   ├── validation_service.dart         # Druckpruefung validieren
-│   │   ├── weather_service.dart            # Open-Meteo Wetter-API
-│   │   ├── onedrive_service.dart           # Microsoft Graph OneDrive
-│   │   ├── pdf_generator_service.dart      # PDF "Lehmann 2000"
-│   │   ├── protocol_storage_service.dart   # Lokale Speicherung
-│   │   ├── storage_service.dart            # SharedPreferences
-│   │   └── email_service.dart              # E-Mail (Legacy, nicht aktiv)
+│   │   ├── recorder_connection_service.dart  # HTTP-Client fuer Recorder + Key + Reboot
+│   │   ├── measurement_service.dart       # Messungsverwaltung
+│   │   ├── csv_parser_service.dart        # CSV parsen/generieren
+│   │   ├── validation_service.dart        # Druckpruefung validieren
+│   │   ├── weather_service.dart           # Open-Meteo Wetter-API
+│   │   ├── nominatim_service.dart         # Reverse Geocoding + Ortssuche
+│   │   ├── supabase_upload_service.dart   # REST-Upload zu Supabase
+│   │   ├── pdf_generator_service.dart     # A4-PDF mit Lehmann-2000-Logo
+│   │   ├── protocol_storage_service.dart  # Lokale Ordnerstruktur
+│   │   ├── storage_service.dart           # SharedPreferences
+│   │   └── email_service.dart             # E-Mail (Legacy, nicht aktiv)
 │   │
 │   ├── providers/
 │   │   ├── providers.dart                 # Barrel-Export
-│   │   └── app_providers.dart              # Riverpod-Provider
+│   │   └── app_providers.dart             # Riverpod-Provider
 │   │
 │   ├── widgets/
 │   │   ├── widgets.dart                   # Barrel-Export
-│   │   ├── pressure_chart.dart             # Druck/Temperatur-Chart (fl_chart)
-│   │   └── measurement_card.dart           # Messungs-Karte
+│   │   ├── pressure_chart.dart            # Druck/Temperatur-Chart (fl_chart)
+│   │   └── measurement_card.dart          # Messungs-Karte
 │   │
 │   └── utils/
 │       ├── utils.dart                     # Barrel-Export
-│       ├── constants.dart                  # App-Konstanten, Azure-ID, Storage-Keys
-│       ├── formatters.dart                 # Zahlen/Datum-Formatierung (de_CH)
-│       └── theme.dart                      # Material Theme
+│       ├── constants.dart                 # App-Konstanten, Recorder-Adresse
+│       ├── formatters.dart                # Zahlen/Datum-Formatierung (de_CH)
+│       └── theme.dart                     # Material Theme
 │
 ├── pi_recorder/
-│   ├── pi_recorder.py                     # Headless Python-Recorder + HTTP API
+│   ├── pi_recorder.py                     # Headless Python-Recorder + HTTP API + Key
 │   ├── setup_pi.sh                        # Pi-Setup (WiFi AP, Service, Python)
 │   ├── requirements.txt                   # pyserial>=3.5
 │   ├── howto.txt                          # Aufbau-Anleitung (Kurzform)
@@ -492,10 +601,14 @@ prezio_v2/
 │
 ├── pc_recorder/                           # PC-Version des Recorders (mit GUI)
 ├── dummy_server/                          # Test-Server fuer Entwicklung
-├── assets/images/                         # App-Assets
+├── assets/images/
+│   ├── kolibri.png                        # App-Logo (Kolibri)
+│   ├── lehmann2000.png                    # PDF-Logo (Lehmann 2000)
+│   └── climartis.png                      # Mutterfirma-Logo (Settings)
 ├── ios/                                   # iOS-spezifisch
 ├── android/                               # Android-spezifisch
 ├── pubspec.yaml                           # Flutter-Abhaengigkeiten
+├── DOKUMENTATION.md                       # Diese Datei
 └── codemagic.yaml                         # CI/CD (Codemagic)
 ```
 
@@ -503,13 +616,12 @@ prezio_v2/
 
 ```dart
 appName = 'Prezio'
-appVersion = '2.2.0'
-defaultPiAddress = '192.168.4.1'
-defaultPiPort = 8080
+appVersion = '2.3.0'
+defaultRecorderAddress = '192.168.4.1'
+defaultRecorderPort = 8080
 connectionTimeout = 10 Sekunden
 requestTimeout = 30 Sekunden
 defaultRecordingInterval = 10.0 Sekunden
-azureClientId = ''  // Nach Azure-Registrierung eintragen
 ```
 
 ### Riverpod-Provider (`lib/providers/app_providers.dart`)
@@ -521,7 +633,8 @@ azureClientId = ''  // Nach Azure-Registrierung eintragen
 | `pdfGeneratorProvider` | Provider | PDF-Erzeugung |
 | `validationServiceProvider` | Provider | Druckpruefung |
 | `weatherServiceProvider` | Provider | Wetterdaten |
-| `oneDriveServiceProvider` | Provider | OneDrive-Upload |
+| `nominatimServiceProvider` | Provider | Standortsuche |
+| `supabaseUploadServiceProvider` | Provider | Supabase-Upload |
 | `protocolStorageProvider` | Provider | Lokale Speicherung |
 | `measurementsProvider` | StateNotifierProvider | Messungsliste (reaktiv) |
 | `selectedMeasurementProvider` | StateProvider | Aktuell gewaehlte Messung |
@@ -533,63 +646,81 @@ azureClientId = ''  // Nach Azure-Registrierung eintragen
 
 ### Vorbereitung (einmalig)
 
-1. Pi zusammenbauen + setup_pi.sh ausfuehren
-2. Azure AD App registrieren, Client-ID eintragen
-3. App auf Monteur-Handy installieren
-4. In Einstellungen: Monteur-Name eintragen, "Mit Microsoft anmelden"
+1. Prezio Recorder zusammenbauen + `setup_pi.sh` ausfuehren
+2. Supabase-Projekt einrichten (Tabellen + Storage Bucket)
+3. Supabase URL + Key in `lib/config/supabase_config.dart` eintragen
+4. App auf Monteur-Handy installieren (IPA via Xcode / Codemagic)
 
 ### Messung durchfuehren
 
-1. **Pi einschalten** (Strom anschliessen)
+1. **Recorder einschalten** (Strom anschliessen)
    - Bootet automatisch (~30s)
    - WiFi AP "Prezio-Recorder" aktiv
    - Sensor wird erkannt
+   - Secret Key wird generiert/geladen
 
 2. **Handy verbinden**
    - WiFi "Prezio-Recorder" waehlen (Passwort: prezio2026)
-   - Prezio-App oeffnen
+   - Prezio-App oeffnen → Kolibri-Logo → "Verbinde..."
+   - Automatische Authentifizierung via Key
 
 3. **Aufzeichnung starten**
-   - "Aufzeichnung starten / stoppen" antippen
-   - Name eingeben (z.B. "Heizung OG Muster")
+   - "Neue Aufzeichnung" → Name eingeben
    - PN und Medium waehlen (werden gesperrt!)
    - "Aufzeichnung starten" → laeuft im Hintergrund
 
 4. **Warten** (Stunden/Tage)
-   - Pi zeichnet alle 10 Sekunden auf
-   - Handy kann weg, Pi laeuft autonom weiter
+   - Recorder zeichnet alle 10 Sekunden auf
+   - Handy kann weg, Recorder laeuft autonom weiter
+   - Maximal 10 Messungen werden gespeichert
 
 5. **Messung auslesen**
-   - Zurueck zum Pi → Handy mit WiFi verbinden
-   - "Messungen vom Pi laden" → Messung antippen
+   - Zurueck zum Recorder → Handy mit WiFi verbinden
+   - "Aufzeichnung stoppen" → automatisch weiter
+   - Oder: "Aufzeichnungen" → vergangene Messung waehlen
 
-6. **Protokoll erstellen**
-   - Projekt-Info ausfuellen
+6. **Recorder-Reboot + Internet**
+   - App sendet Reboot-Befehl an Recorder
+   - Benutzer verbindet sich mit normalem WiFi / Mobilfunk
+   - App prueft Internet automatisch alle 3 Sekunden
+   - **Sofortiger CSV-Upload** zu Supabase (Rohdaten-Sicherung)
+
+7. **Standort & Wetter**
+   - GPS-Position wird abgerufen
+   - Adresse wird automatisch ueber Nominatim aufgeloest
+   - Standort kann manuell angepasst werden (Suchfeld mit Vorschlaegen)
+   - Wetterdaten werden von Open-Meteo geladen
+
+8. **Protokoll ausfuellen**
+   - Projekt-Info eingeben
    - PN/Medium sind gesperrt (Anti-Manipulation)
-   - Validierung laeuft automatisch (inkl. Wetterdaten falls Internet)
+   - **Druckkurve** wird direkt im Formular angezeigt
+   - Validierung laeuft automatisch (inkl. Wetterdaten)
    - "Weiter zur Unterschrift"
 
-7. **Unterschreiben**
-   - Monteur unterschreibt auf dem Bildschirm
+9. **Unterschreiben**
+   - Monteur unterschreibt auf dem Bildschirm (Normal oder Vollbild)
+   - Druckkurve nochmals sichtbar
    - "Protokoll erstellen & speichern"
 
-8. **Automatisch gespeichert**
-   - Lokal auf dem Handy
-   - Automatisch nach OneDrive hochgeladen
-   - PDF + CSV + Metadaten (mit SHA-256 Hash)
+10. **Automatisch gespeichert**
+    - Lokal auf dem Handy
+    - PDF + CSV automatisch nach Supabase Storage hochgeladen
+    - Metadaten in Supabase-Tabelle `protokolle`
+    - SHA-256 Hash fuer Integritaet
 
 ---
 
 ## 10. Fehlerbehebung
 
-### Pi verbindet nicht
+### Recorder verbindet nicht
 
 | Problem | Loesung |
 |---|---|
-| WiFi "Prezio-Recorder" nicht sichtbar | Pi Strom pruefen, 60s warten |
+| WiFi "Prezio-Recorder" nicht sichtbar | Recorder Strom pruefen, 60s warten |
 | WiFi sichtbar, aber keine Verbindung | Passwort: `prezio2026` |
-| Verbunden, aber kein Zugriff auf 192.168.4.1 | `setup_pi.sh` nochmal ausfuehren |
-| SSH: "HOST IDENTIFICATION HAS CHANGED" | `ssh-keygen -R prezio-pi.local` |
+| Verbunden, aber App zeigt "Verbinde..." | `setup_pi.sh` nochmal ausfuehren |
+| SSH: "HOST IDENTIFICATION HAS CHANGED" | `ssh-keygen -R 192.168.4.1` |
 
 ### Sensor
 
@@ -603,14 +734,16 @@ azureClientId = ''  // Nach Azure-Registrierung eintragen
 
 | Problem | Loesung |
 |---|---|
-| "Keine Verbindung zum Pi" | Mit "Prezio-Recorder" WiFi verbinden |
-| OneDrive Upload fehlschlaegt | In Einstellungen neu anmelden |
-| Wetterdaten nicht verfuegbar | Normal wenn auf Pi-WiFi (kein Internet), Standard-Toleranz wird genutzt |
+| "Verbinde mit Prezio Recorder..." | Mit "Prezio-Recorder" WiFi verbinden |
+| Supabase Upload fehlschlaegt | URL/Key in `supabase_config.dart` pruefen |
+| "Cloud nicht konfiguriert" | Supabase URL + Key leer → eintragen |
+| Wetterdaten nicht verfuegbar | Normal wenn auf Recorder-WiFi (kein Internet) |
+| Standort nicht erkannt | GPS-Berechtigung in iOS-Einstellungen pruefen |
 
-### Pi-Logs einsehen
+### Recorder-Logs einsehen
 
 ```bash
-# Mit Pi-WiFi verbinden, dann:
+# Mit Recorder-WiFi verbinden, dann:
 ssh pi@192.168.4.1
 
 # Service-Logs live anzeigen
@@ -621,11 +754,29 @@ sudo systemctl restart prezio-recorder
 
 # Service-Status
 sudo systemctl status prezio-recorder
+
+# Key anzeigen
+cat /home/pi/prezio_key.txt
 ```
 
 ---
 
-## 11. Cursor-Kontext (Prompt fuer neuen Chat)
+## 11. Branding & Logos
+
+| Verwendung | Logo | Datei |
+|---|---|---|
+| **App-Icon** (Launcher) | Kolibri (Hummingbird) | `assets/images/kolibri.png` |
+| **App ConnectScreen** | Kolibri | `assets/images/kolibri.png` |
+| **PDF-Protokoll Header** | Lehmann 2000 (offiziell) | `assets/images/lehmann2000.png` |
+| **Settings (versteckt)** | Climartis (Hexagon, Mutterfirma) | `assets/images/climartis.png` |
+
+- **Lehmann 2000** ist die Marke fuer Sanitaer-Druckpruefungen
+- **Climartis** ist die Mutterfirma von Lehmann 2000 und Soleco
+- Das Kolibri-Logo ersetzt den frueheren Kompass
+
+---
+
+## 12. Cursor-Kontext (Prompt fuer neuen Chat)
 
 Kopiere folgendes in einen neuen Cursor-Chat um den vollen Kontext zu haben:
 
@@ -636,13 +787,17 @@ Kopiere folgendes in einen neuen Cursor-Chat um den vollen Kontext zu haben:
 **Pfad:** `C:\Users\noegl\OneDrive - Soleco AG\Desktop\Soleco Noé Desktop\tools\prezio_v2`
 **Repo:** https://github.com/someFisherman/prezio-v2.git
 
-**System:** Ein Raspberry Pi (4B oder Zero 2 W) mit KELLER LEO5 Drucksensor, verbunden per USB-Seriell. Der Pi erstellt ein WiFi Access Point ("Prezio-Recorder", 192.168.4.1). Ein headless Python-Script (`pi_recorder/pi_recorder.py`) steuert den Sensor und bietet eine HTTP REST API auf Port 8080. Die Flutter-App verbindet sich per WiFi, startet/stoppt Aufzeichnungen, laedt Messdaten als CSV, validiert automatisch (Gasgesetz fuer Luft, thermische Ausdehnung fuer Wasser, mit Wetterdaten-Korrektur via Open-Meteo), erstellt ein PDF-Protokoll mit Unterschrift und laedt alles automatisch nach OneDrive (Microsoft Graph API, OAuth2 PKCE).
+**System:** Ein "Prezio Recorder" (Raspberry Pi 4B oder Zero 2 W) mit KELLER LEO5 Drucksensor, verbunden per USB-Seriell. Der Recorder erstellt ein WiFi Access Point ("Prezio-Recorder", 192.168.4.1). Ein headless Python-Script (`pi_recorder/pi_recorder.py`) steuert den Sensor und bietet eine HTTP REST API auf Port 8080. Die App authentifiziert sich ueber einen Secret Key (`/auth/key`), steuert Aufzeichnungen, laedt Messdaten als CSV, validiert automatisch (Gasgesetz fuer Luft, thermische Ausdehnung fuer Wasser, mit Wetterdaten-Korrektur via Open-Meteo), erkennt den Standort (GPS + Nominatim/OpenStreetMap), erstellt ein PDF-Protokoll mit Lehmann-2000-Logo und Unterschrift, und laedt alles automatisch nach Supabase (REST API, keine Kreditkarte, kein Login am Handy).
 
-**Techstack:** Flutter 3.9+, Riverpod, fl_chart, pdf/printing, signature, http, geolocator, flutter_web_auth_2, crypto. Pi: Python 3, pyserial, NetworkManager, systemd.
+**Techstack:** Flutter 3.9+, Riverpod, fl_chart, pdf/printing, signature, http, geolocator, crypto. Pi: Python 3, pyserial, NetworkManager, systemd. Cloud: Supabase (REST API, kein SDK).
+
+**Kein Login:** App-Zugang nur ueber Verbindung zum Prezio Recorder (Secret Key). Kein Passwort, kein Google/Microsoft-Login.
 
 **Anti-Manipulation:** PN und Medium werden bei Aufzeichnungsstart festgelegt und im CSV-Header gespeichert. Bei der Auswertung sind diese Felder gesperrt. Validierung ist automatisch, der Monteur kann nicht manuell "gueltig/ungueltig" waehlen. CSV wird mit SHA-256 gehasht.
 
-**Wichtige Dateien:** Siehe `DOKUMENTATION.md` im Projektroot fuer die komplette Beschreibung aller Dateien, Services, Modelle, API-Endpunkte, Validierungslogik und Hardware-Setup.
+**Branding:** App-Logo = Kolibri, PDF-Logo = Lehmann 2000, Settings = Climartis (Mutterfirma).
+
+**Wichtige Dateien:** Siehe `DOKUMENTATION.md` im Projektroot fuer die komplette Beschreibung aller Dateien, Services, Modelle, API-Endpunkte, Validierungslogik, Supabase-Setup und Hardware-Aufbau.
 
 ---
 
