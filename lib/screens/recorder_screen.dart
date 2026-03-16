@@ -5,7 +5,6 @@ import '../providers/providers.dart';
 import '../services/services.dart';
 import 'internet_check_screen.dart';
 import 'recorder_file_selection_screen.dart';
-import 'settings_screen.dart';
 
 class RecorderScreen extends ConsumerStatefulWidget {
   const RecorderScreen({super.key});
@@ -214,24 +213,7 @@ class _RecorderScreenState extends ConsumerState<RecorderScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Aufzeichnung'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.folder_open),
-            tooltip: 'Gespeicherte Messungen',
-            onPressed: _goToFileSelection,
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const SettingsScreen()),
-            ),
-          ),
-        ],
+        automaticallyImplyLeading: false,
       ),
       body: _buildBody(),
     );
