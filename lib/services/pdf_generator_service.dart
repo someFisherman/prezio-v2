@@ -292,24 +292,63 @@ class PdfGeneratorService {
         ? Formatters.formatDate(data.signatureDate!)
         : Formatters.formatDate(DateTime.now());
 
-    return pw.Row(
-      crossAxisAlignment: pw.CrossAxisAlignment.end,
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
+        pw.Text('Datum: $dateStr', style: const pw.TextStyle(fontSize: 11)),
+        pw.SizedBox(height: 20),
+        pw.Row(
+          crossAxisAlignment: pw.CrossAxisAlignment.end,
           children: [
-            pw.Text('Datum $dateStr, Unterschrift', style: const pw.TextStyle(fontSize: 11)),
-            pw.SizedBox(height: 5),
-            if (data.signature != null)
-              pw.Image(pw.MemoryImage(data.signature!), width: 200, height: 80)
-            else
-              pw.Container(
-                width: 200,
-                decoration: const pw.BoxDecoration(
-                  border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5)),
-                ),
-                child: pw.SizedBox(height: 40),
+            // Links: Monteur (mit digitaler Unterschrift)
+            pw.Expanded(
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    'Monteur: ${data.technicianName}',
+                    style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                  ),
+                  pw.SizedBox(height: 5),
+                  if (data.signature != null)
+                    pw.Image(pw.MemoryImage(data.signature!), width: 180, height: 70)
+                  else
+                    pw.Container(
+                      width: 180,
+                      decoration: const pw.BoxDecoration(
+                        border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5)),
+                      ),
+                      child: pw.SizedBox(height: 50),
+                    ),
+                ],
               ),
+            ),
+            pw.SizedBox(width: 40),
+            // Rechts: Offenes Feld fuer Projektleiter / Auftraggeber
+            pw.Expanded(
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(
+                    'Unterschrift:',
+                    style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+                  ),
+                  pw.SizedBox(height: 5),
+                  pw.Container(
+                    width: 180,
+                    decoration: const pw.BoxDecoration(
+                      border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5)),
+                    ),
+                    child: pw.SizedBox(height: 50),
+                  ),
+                  pw.SizedBox(height: 4),
+                  pw.Text(
+                    'Name:  ____________________________',
+                    style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey600),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ],
