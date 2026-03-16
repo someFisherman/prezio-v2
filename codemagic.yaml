@@ -65,15 +65,10 @@ workflows:
       - name: Set up code signing settings on Xcode project
         script: xcode-project use-profiles
       
-      - name: Fetch latest build number from TestFlight
-        script: |
-          LATEST=$(app-store-connect get-latest-testflight-build-number ch.soleco.prezioV2 || echo "0")
-          NEXT=$((LATEST + 1))
-          echo "TestFlight build: $LATEST -> next: $NEXT"
-          echo "BUILD_NUM=$NEXT" >> $CM_ENV
-      
       - name: Build iOS IPA (signed)
         script: |
+          BUILD_NUM=$(($(date -u +%s) / 60))
+          echo "Using build number: $BUILD_NUM"
           flutter build ipa --release \
             --export-options-plist=/Users/builder/export_options.plist \
             --build-number=$BUILD_NUM
@@ -102,10 +97,9 @@ workflows:
         notify:
           success: true
           failure: true
+
   # ==========================================
-  # iOS Build (unsigned - Fallback ohne Signierung)
-  # Nutzen: Wenn ios-build-signed fehlschlägt, liefert dieser Workflow
-  # eine IPA zum manuellen Testen. Oder zum Testen, ob Flutter/Xcode überhaupt baut.
+  # iOS Build (unsigned - Fallback)
   # ==========================================
   ios-build-unsigned:
     name: iOS Build (Unsigned)
@@ -184,15 +178,10 @@ workflows:
       - name: Set up code signing settings on Xcode project
         script: xcode-project use-profiles
       
-      - name: Fetch latest build number from TestFlight
-        script: |
-          LATEST=$(app-store-connect get-latest-testflight-build-number ch.soleco.prezioV2 || echo "0")
-          NEXT=$((LATEST + 1))
-          echo "TestFlight build: $LATEST -> next: $NEXT"
-          echo "BUILD_NUM=$NEXT" >> $CM_ENV
-      
       - name: Build iOS IPA (signed)
         script: |
+          BUILD_NUM=$(($(date -u +%s) / 60))
+          echo "Using build number: $BUILD_NUM"
           flutter build ipa --release \
             --export-options-plist=/Users/builder/export_options.plist \
             --build-number=$BUILD_NUM
