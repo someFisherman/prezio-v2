@@ -38,14 +38,15 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
 
     try {
       final pdfGenerator = ref.read(pdfGeneratorProvider);
-      final pdfPath = await pdfGenerator.generateProtocolPdf(widget.protocolData);
+      final pdfResult = await pdfGenerator.generateProtocolPdfs(widget.protocolData);
 
       final measurementService = ref.read(measurementServiceProvider);
       final csvContent = measurementService.exportToCsv(widget.protocolData.measurement);
 
       final storageService = ref.read(protocolStorageProvider);
       final localResult = await storageService.saveProtocol(
-        pdfPath: pdfPath,
+        protocolPdfPath: pdfResult.protocolPath,
+        chartPdfPath: pdfResult.chartPath,
         csvContent: csvContent,
         protocolData: widget.protocolData,
       );
@@ -57,7 +58,8 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
       final supabaseService = ref.read(supabaseUploadServiceProvider);
       if (supabaseService.isConfigured) {
         final uploadResult = await supabaseService.uploadProtocol(
-          pdfPath: pdfPath,
+          protocolPdfPath: pdfResult.protocolPath,
+          chartPdfPath: pdfResult.chartPath,
           csvContent: csvContent,
           protocolData: widget.protocolData,
           folderName: folderName,

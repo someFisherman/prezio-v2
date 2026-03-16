@@ -7,18 +7,23 @@ import '../utils/formatters.dart';
 
 class ProtocolStorageResult {
   final String folderPath;
-  final String pdfPath;
+  final String protocolPdfPath;
+  final String chartPdfPath;
   final String? csvPath;
   final String metadataPath;
   final bool savedToCustomFolder;
 
   const ProtocolStorageResult({
     required this.folderPath,
-    required this.pdfPath,
+    required this.protocolPdfPath,
+    required this.chartPdfPath,
     this.csvPath,
     required this.metadataPath,
     this.savedToCustomFolder = false,
   });
+
+  @Deprecated('Use protocolPdfPath')
+  String get pdfPath => protocolPdfPath;
 }
 
 class ProtocolStorageService {
@@ -32,7 +37,8 @@ class ProtocolStorageService {
   }
 
   Future<ProtocolStorageResult> saveProtocol({
-    required String pdfPath,
+    required String protocolPdfPath,
+    required String chartPdfPath,
     String? csvContent,
     required ProtocolData protocolData,
     String? customOutputFolder,
@@ -69,8 +75,10 @@ class ProtocolStorageService {
       targetFolder = await _createLocalFolder(folderName);
     }
 
-    final pdfDest = '${targetFolder.path}/Druckprotokoll_${date}_$result.pdf';
-    await File(pdfPath).copy(pdfDest);
+    final protocolDest = '${targetFolder.path}/Druckprotokoll_${date}_$result.pdf';
+    final chartDest = '${targetFolder.path}/Druckkurve_${date}_$result.pdf';
+    await File(protocolPdfPath).copy(protocolDest);
+    await File(chartPdfPath).copy(chartDest);
 
     String? csvDest;
     String? csvHash;
@@ -87,7 +95,8 @@ class ProtocolStorageService {
 
     return ProtocolStorageResult(
       folderPath: targetFolder.path,
-      pdfPath: pdfDest,
+      protocolPdfPath: protocolDest,
+      chartPdfPath: chartDest,
       csvPath: csvDest,
       metadataPath: metadataPath,
       savedToCustomFolder: savedToCustom,

@@ -57,22 +57,28 @@ workflows:
         script: xcode-project use-profiles
       
       - name: Build iOS IPA (signed)
-        script: flutter build ipa --release
-      
-      - name: Copy IPA for artifacts
         script: |
-          mkdir -p artifacts
-          if ls build/ios/ipa/*.ipa 1>/dev/null 2>&1; then
-            cp build/ios/ipa/*.ipa artifacts/Prezio.ipa
+          flutter build ipa --release \
+            --export-options-plist=/Users/builder/export_options.plist
+      
+      - name: Verify IPA exists
+        script: |
+          echo "=== build/ios/ipa/ ==="
+          ls -la build/ios/ipa/ 2>/dev/null || echo "build/ios/ipa/ existiert nicht"
+          IPA_COUNT=$(ls build/ios/ipa/*.ipa 2>/dev/null | wc -l)
+          echo "Gefundene IPA-Dateien: $IPA_COUNT"
+          if [ "$IPA_COUNT" -eq 0 ]; then
+            echo "FEHLER: Keine IPA gefunden!"
+            exit 1
           fi
-          ls -la build/ios/ipa/ || true
     
     artifacts:
       - build/ios/ipa/*.ipa
-      - artifacts/*.ipa
-      - build/ios/iphoneos/Runner.app
     
     publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
       email:
         recipients:
           - gloognoe@gmail.com
@@ -81,6 +87,8 @@ workflows:
           failure: true
   # ==========================================
   # iOS Build (unsigned - Fallback ohne Signierung)
+  # Nutzen: Wenn ios-build-signed fehlschlägt, liefert dieser Workflow
+  # eine IPA zum manuellen Testen. Oder zum Testen, ob Flutter/Xcode überhaupt baut.
   # ==========================================
   ios-build-unsigned:
     name: iOS Build (Unsigned)
@@ -158,22 +166,18 @@ workflows:
         script: xcode-project use-profiles
       
       - name: Build iOS IPA (signed)
-        script: flutter build ipa --release
-      
-      - name: Copy IPA for artifacts
         script: |
-          mkdir -p artifacts
-          if ls build/ios/ipa/*.ipa 1>/dev/null 2>&1; then
-            cp build/ios/ipa/*.ipa artifacts/Prezio.ipa
-          fi
-          ls -la build/ios/ipa/ || true
+          flutter build ipa --release \
+            --export-options-plist=/Users/builder/export_options.plist
     
     artifacts:
       - build/app/outputs/flutter-apk/*.apk
       - build/ios/ipa/*.ipa
-      - artifacts/*.ipa
     
     publishing:
+      app_store_connect:
+        auth: integration
+        submit_to_testflight: true
       email:
         recipients:
           - gloognoe@gmail.com

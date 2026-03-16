@@ -64,9 +64,10 @@ class SupabaseUploadService {
     }
   }
 
-  /// Upload complete protocol: metadata + CSV in table, PDF in Storage.
+  /// Upload complete protocol: metadata + CSV in table, PDFs in Storage.
   Future<SupabaseUploadResult> uploadProtocol({
-    required String pdfPath,
+    required String protocolPdfPath,
+    required String chartPdfPath,
     required String csvContent,
     required ProtocolData protocolData,
     required String folderName,
@@ -82,12 +83,12 @@ class SupabaseUploadService {
       final csvHash = sha256.convert(utf8.encode(csvContent)).toString();
       String? pdfStoragePath;
 
-      // 1. Upload PDF to Storage (unique name per upload)
+      // 1. Upload protocol PDF to Storage
       final ts = DateTime.now().millisecondsSinceEpoch;
-      final pdfFile = File(pdfPath);
-      if (pdfFile.existsSync()) {
+      final protocolFile = File(protocolPdfPath);
+      if (protocolFile.existsSync()) {
         pdfStoragePath = '$folderName/protokoll_$ts.pdf';
-        final pdfBytes = await pdfFile.readAsBytes();
+        final pdfBytes = await protocolFile.readAsBytes();
         final uploadRes = await http.post(
           Uri.parse('$_storageUrl/object/${SupabaseConfig.bucket}/$pdfStoragePath'),
           headers: {
@@ -101,6 +102,23 @@ class SupabaseUploadService {
         if (uploadRes.statusCode < 200 || uploadRes.statusCode >= 300) {
           pdfStoragePath = null;
         }
+      }
+
+      // 1b. Upload chart PDF to Storage
+      final chartFile = File(chartPdfPath);
+      if (chartFile.existsSync()) {
+        final chartStoragePath = '$folderName/kurve_$ts.pdf';
+        final chartBytes = await chartFile.readAsBytes();
+        await http.post(
+          Uri.parse('$_storageUrl/object/${SupabaseConfig.bucket}/$chartStoragePath'),
+          headers: {
+            'apikey': SupabaseConfig.anonKey,
+            'Authorization': 'Bearer ${SupabaseConfig.anonKey}',
+            'Content-Type': 'application/pdf',
+            'x-upsert': 'true',
+          },
+          body: chartBytes,
+        );
       }
 
       // 2. Upload CSV to Storage

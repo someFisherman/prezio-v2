@@ -6,6 +6,18 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
 import '../models/models.dart';
 import '../utils/formatters.dart';
+import '../utils/chart_data_helper.dart';
+
+/// Ergebnis: zwei separate PDF-Pfade
+class ProtocolPdfResult {
+  final String protocolPath;
+  final String chartPath;
+
+  const ProtocolPdfResult({
+    required this.protocolPath,
+    required this.chartPath,
+  });
+}
 
 class PdfGeneratorService {
   pw.MemoryImage? _lehmannLogo;
@@ -21,362 +33,289 @@ class PdfGeneratorService {
     }
   }
 
-  Future<String> generateProtocolPdf(ProtocolData data) async {
+  /// Erzeugt zwei separate PDFs: Protokoll (1 Seite) und Kurve (Querformat, eigene Seite)
+  Future<ProtocolPdfResult> generateProtocolPdfs(ProtocolData data) async {
+    final protocolPath = await _generateProtocolPdf(data);
+    final chartPath = await _generateChartPdf(data.measurement);
+    return ProtocolPdfResult(protocolPath: protocolPath, chartPath: chartPath);
+  }
+
+  /// PDF 1: Protokoll – kompakt auf 1 Seite
+  Future<String> _generateProtocolPdf(ProtocolData data) async {
     final pdf = pw.Document();
     final logo = await _loadLehmannLogo();
 
     pdf.addPage(
-      pw.MultiPage(
+      pw.Page(
         pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.all(50),
-        header: (_) => _buildHeader(logo),
-        footer: (_) => _buildFooter(),
-        build: (context) => [
-          pw.SizedBox(height: 20),
-          _buildLocationDate(data),
-          pw.SizedBox(height: 24),
-          _buildTitle(),
-          pw.SizedBox(height: 16),
-          _buildProjectInfo(data),
-          pw.SizedBox(height: 16),
-          _buildIntroText(),
-          pw.SizedBox(height: 16),
-          _buildPressureInfo(data),
-          pw.SizedBox(height: 16),
-          _buildTestType(),
-          pw.SizedBox(height: 24),
-          _buildResult(data),
-          pw.SizedBox(height: 30),
-          _buildSignatureSection(data),
-        ],
+        margin: const pw.EdgeInsets.symmetric(horizontal: 40, vertical: 28),
+        build: (context) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            _buildHeaderCompact(logo),
+            pw.SizedBox(height: 8),
+            _buildLocationDate(data),
+            pw.SizedBox(height: 6),
+            _buildTitleCompact(),
+            pw.SizedBox(height: 8),
+            _buildProjectInfoCompact(data),
+            pw.SizedBox(height: 6),
+            _buildIntroTextCompact(),
+            pw.SizedBox(height: 6),
+            _buildPressureInfoCompact(data),
+            pw.SizedBox(height: 6),
+            _buildTestTypeCompact(),
+            pw.SizedBox(height: 8),
+            _buildResultCompact(data),
+            pw.SizedBox(height: 12),
+            _buildSignatureSectionCompact(data),
+            pw.Spacer(),
+            _buildFooterCompact(),
+          ],
+        ),
       ),
     );
-
-    if (data.chartImage != null) {
-      pdf.addPage(
-        pw.Page(
-          pageFormat: PdfPageFormat.a4,
-          margin: const pw.EdgeInsets.all(40),
-          build: (context) => pw.Center(
-            child: pw.Image(
-              pw.MemoryImage(data.chartImage!),
-              width: 500,
-              height: 350,
-              fit: pw.BoxFit.contain,
-            ),
-          ),
-        ),
-      );
-    }
 
     final tempDir = await getTemporaryDirectory();
     final timestamp = DateTime.now().millisecondsSinceEpoch;
     final file = File('${tempDir.path}/druckprotokoll_$timestamp.pdf');
     await file.writeAsBytes(await pdf.save());
-
     return file.path;
   }
 
-  pw.Widget _buildHeader(pw.MemoryImage? logo) {
-    if (logo != null) {
-      return pw.Padding(
-        padding: const pw.EdgeInsets.only(bottom: 10),
-        child: pw.Row(
-          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-          children: [
-            pw.Image(logo, width: 400, height: 120, fit: pw.BoxFit.contain),
-          ],
+  /// PDF 2: Nur Kurve – Querformat, ganze Seite, aus Messdaten generiert
+  Future<String> _generateChartPdf(Measurement measurement) async {
+    if (measurement.samples.isEmpty) {
+      final tempDir = await getTemporaryDirectory();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final file = File('${tempDir.path}/druckkurve_$timestamp.pdf');
+      final pdf = pw.Document();
+      pdf.addPage(
+        pw.Page(
+          pageFormat: PdfPageFormat.a4.landscape,
+          build: (context) => pw.Center(
+            child: pw.Text(
+              'Keine Messdaten vorhanden',
+              style: pw.TextStyle(fontSize: 14),
+            ),
+          ),
         ),
       );
+      await file.writeAsBytes(await pdf.save());
+      return file.path;
     }
 
-    return pw.Padding(
-      padding: const pw.EdgeInsets.only(bottom: 10),
-      child: pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          pw.Text(
-            'LEHMANN 2000',
-            style: pw.TextStyle(
-              fontSize: 28,
-              fontWeight: pw.FontWeight.bold,
-              color: PdfColors.red700,
+    final pMin = ChartDataHelper.roundedMinY(measurement);
+    final pMax = ChartDataHelper.roundedMaxY(measurement);
+    final totalSec = measurement.duration.inSeconds.toDouble();
+    final pressureSpots = ChartDataHelper.smoothedPressureSpots(measurement);
+    final tempSpots = ChartDataHelper.smoothedTempSpots(measurement, pMin, pMax);
+
+    final xTicks = _computeTimeTicks(totalSec);
+    final yTicks = _computePressureTicks(pMin, pMax);
+
+    final pdf = pw.Document();
+    pdf.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4.landscape,
+        margin: const pw.EdgeInsets.all(50),
+        build: (context) => pw.Chart(
+          grid: pw.CartesianGrid(
+            xAxis: pw.FixedAxis(
+              xTicks,
+              format: (v) => _formatTimeLabel(v.toDouble()),
+              divisions: true,
+              divisionsColor: PdfColors.grey300,
+            ),
+            yAxis: pw.FixedAxis(
+              yTicks,
+              format: (v) => v.toStringAsFixed(v % 1 == 0 ? 0 : 1),
+              divisions: true,
+              divisionsColor: PdfColors.grey300,
             ),
           ),
-          pw.Text(
-            'Ihr Partner fuer Waermetechnik',
-            style: pw.TextStyle(
-              fontSize: 12,
-              fontStyle: pw.FontStyle.italic,
-              color: PdfColors.grey600,
+          datasets: [
+            pw.LineDataSet(
+              data: pressureSpots.map((s) => pw.PointChartValue(s.x, s.y)).toList(),
+              color: PdfColors.blue,
+              lineWidth: 2.5,
+              drawPoints: false,
+              drawSurface: true,
+              surfaceOpacity: 0.08,
+              isCurved: true,
+              smoothness: 0.4,
             ),
-          ),
-        ],
+            pw.LineDataSet(
+              data: tempSpots.map((s) => pw.PointChartValue(s.x, s.y)).toList(),
+              color: PdfColors.orange,
+              lineWidth: 1.5,
+              drawPoints: false,
+              lineColor: PdfColors.orange,
+              isCurved: true,
+              smoothness: 0.4,
+            ),
+          ],
+        ),
       ),
+    );
+
+    final tempDir = await getTemporaryDirectory();
+    final timestamp = DateTime.now().millisecondsSinceEpoch;
+    final file = File('${tempDir.path}/druckkurve_$timestamp.pdf');
+    await file.writeAsBytes(await pdf.save());
+    return file.path;
+  }
+
+  List<double> _computeTimeTicks(double totalSec) {
+    const candidates = [30.0, 60.0, 120.0, 300.0, 600.0, 900.0, 1800.0, 3600.0];
+    double interval = 60;
+    for (final c in candidates) {
+      if (totalSec / c <= 12) {
+        interval = c;
+        break;
+      }
+    }
+    final ticks = <double>[0];
+    for (double t = interval; t < totalSec; t += interval) {
+      ticks.add(t);
+    }
+    if (totalSec > 0 && (ticks.isEmpty || ticks.last < totalSec - 1)) {
+      ticks.add(totalSec);
+    }
+    return ticks;
+  }
+
+  List<double> _computePressureTicks(double pMin, double pMax) {
+    final range = pMax - pMin;
+    final step = ChartDataHelper.niceInterval(range);
+    final ticks = <double>[];
+    for (double v = pMin; v <= pMax + 0.001; v += step) {
+      ticks.add((v * 100).round() / 100);
+    }
+    return ticks.isEmpty ? [pMin, pMax] : ticks;
+  }
+
+  String _formatTimeLabel(double sec) {
+    if (sec == 0) return '0';
+    if (sec < 3600) return '${(sec / 60).round()}min';
+    final h = (sec / 3600).floor();
+    final m = ((sec % 3600) / 60).round();
+    return m > 0 ? '${h}h${m.toString().padLeft(2, '0')}' : '${h}h';
+  }
+
+  pw.Widget _buildHeaderCompact(pw.MemoryImage? logo) {
+    if (logo != null) {
+      return pw.Image(logo, width: 280, height: 85, fit: pw.BoxFit.contain);
+    }
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text('LEHMANN 2000', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold, color: PdfColors.red700)),
+        pw.Text('Ihr Partner fuer Waermetechnik', style: pw.TextStyle(fontSize: 9, fontStyle: pw.FontStyle.italic, color: PdfColors.grey600)),
+      ],
     );
   }
 
   pw.Widget _buildLocationDate(ProtocolData data) {
     final now = DateTime.now();
-    final dateStr = Formatters.formatDateTime(now);
     final locationText = data.location != null && data.location!.isNotEmpty
         ? data.location!.split(',').first.trim()
         : 'Zofingen';
-    return pw.Text(
-      '$locationText / $dateStr',
-      style: const pw.TextStyle(fontSize: 11, color: PdfColors.blue800),
-    );
+    return pw.Text('$locationText / ${Formatters.formatDateTime(now)}', style: const pw.TextStyle(fontSize: 9, color: PdfColors.blue800));
   }
 
-  pw.Widget _buildTitle() {
-    return pw.Text(
-      'Druckprotokoll',
-      style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold),
-    );
+  pw.Widget _buildTitleCompact() {
+    return pw.Text('Druckprotokoll', style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold));
   }
 
-  pw.Widget _buildProjectInfo(ProtocolData data) {
+  pw.Widget _buildProjectInfoCompact(ProtocolData data) {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        _buildLabelValue('Objekt / Anlage:', data.objectName),
-        pw.SizedBox(height: 6),
-        _buildLabelValue('Projekt:', data.projectName),
-        pw.SizedBox(height: 6),
-        pw.Text(
-          'Verfasser: ${data.author.isNotEmpty ? data.author : data.technicianName}',
-          style: const pw.TextStyle(fontSize: 11),
-        ),
-        if (data.location != null && data.location!.isNotEmpty) ...[
-          pw.SizedBox(height: 6),
-          _buildLabelValue('Standort:', data.location!),
-        ],
+        _buildLabelValueCompact('Objekt:', data.objectName),
+        _buildLabelValueCompact('Projekt:', data.projectName),
+        pw.Text('Verfasser: ${data.author.isNotEmpty ? data.author : data.technicianName}', style: const pw.TextStyle(fontSize: 9)),
       ],
     );
   }
 
-  pw.Widget _buildLabelValue(String label, String value) {
+  pw.Widget _buildLabelValueCompact(String label, String value) {
     return pw.RichText(
       text: pw.TextSpan(
         children: [
-          pw.TextSpan(
-            text: '$label ',
-            style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
-          ),
-          pw.TextSpan(
-            text: value.isNotEmpty ? value : '-',
-            style: const pw.TextStyle(fontSize: 11),
-          ),
+          pw.TextSpan(text: '$label ', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+          pw.TextSpan(text: value.isNotEmpty ? value : '-', style: const pw.TextStyle(fontSize: 9)),
         ],
       ),
     );
   }
 
-  pw.Widget _buildIntroText() {
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.Text('Sehr geehrte Damen und Herren', style: const pw.TextStyle(fontSize: 11)),
-        pw.SizedBox(height: 4),
-        pw.Text('Anbei erhalten Sie unser Druckprotokoll', style: const pw.TextStyle(fontSize: 11)),
-      ],
-    );
+  pw.Widget _buildIntroTextCompact() {
+    return pw.Text('Sehr geehrte Damen und Herren, anbei erhalten Sie unser Druckprotokoll.', style: const pw.TextStyle(fontSize: 9));
   }
 
-  pw.Widget _buildPressureInfo(ProtocolData data) {
-    final testDuration = data.testDuration.isNotEmpty
-        ? data.testDuration
-        : Formatters.formatDuration(data.measurement.duration);
-
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
+  pw.Widget _buildPressureInfoCompact(ProtocolData data) {
+    final testDuration = data.testDuration.isNotEmpty ? data.testDuration : Formatters.formatDuration(data.measurement.duration);
+    return pw.Wrap(
+      runSpacing: 2,
+      spacing: 16,
       children: [
         if (data.testProfileName != null && data.testProfileName!.isNotEmpty)
-          _buildInfoRow('Pruefprofil:', data.testProfileName!),
-        _buildInfoRow('Betriebsdruck:', data.nominalPressure > 0 ? 'PN ${data.nominalPressure}' : '-'),
-        _buildInfoRow('Druckpruefung:', data.testMedium.displayName),
-        _buildInfoRow('Pruefdruck:', Formatters.formatPressureWithUnit(data.testPressure)),
-        _buildInfoRow('Pruefdauer:', testDuration),
-        if (data.detectedHoldDurationHours > 0)
-          _buildInfoRow('Erkannte Haltezeit:', _formatPdfHours(data.detectedHoldDurationHours)),
-        if (data.pressureDropBar > 0)
-          _buildInfoRow('Druckabfall:', '${data.pressureDropBar.toStringAsFixed(3)} bar'),
+          pw.Text('Pruefprofil: ${data.testProfileName!}', style: const pw.TextStyle(fontSize: 9)),
+        pw.Text('Betriebsdruck: ${data.nominalPressure > 0 ? "PN ${data.nominalPressure}" : "-"}', style: const pw.TextStyle(fontSize: 9)),
+        pw.Text('Druckpruefung: ${data.testMedium.displayName}', style: const pw.TextStyle(fontSize: 9)),
+        pw.Text('Pruefdruck: ${Formatters.formatPressureWithUnit(data.testPressure)}', style: const pw.TextStyle(fontSize: 9)),
+        pw.Text('Pruefdauer: $testDuration', style: const pw.TextStyle(fontSize: 9)),
       ],
     );
   }
 
-  String _formatPdfHours(double hours) {
-    if (hours < 1.0) {
-      final mins = (hours * 60).round();
-      return '${mins}min';
-    }
-    final h = hours.floor();
-    final m = ((hours - h) * 60).round();
-    if (m == 0) return '${h}h';
-    return '${h}h ${m}min';
+  pw.Widget _buildTestTypeCompact() {
+    return pw.Text('Pruefart: Manometer', style: const pw.TextStyle(fontSize: 9));
   }
 
-  pw.Widget _buildInfoRow(String label, String value) {
-    return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(vertical: 3),
-      child: pw.Row(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          pw.SizedBox(
-            width: 120,
-            child: pw.Text(label, style: const pw.TextStyle(fontSize: 11)),
-          ),
-          pw.Expanded(
-            child: pw.Text(value, style: const pw.TextStyle(fontSize: 11)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  pw.Widget _buildTestType() {
-    return pw.Row(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.SizedBox(
-          width: 120,
-          child: pw.Text('Pruefart:', style: const pw.TextStyle(fontSize: 11)),
-        ),
-        pw.Text('Manometer', style: const pw.TextStyle(fontSize: 11)),
-      ],
-    );
-  }
-
-  pw.Widget _buildResult(ProtocolData data) {
+  pw.Widget _buildResultCompact(ProtocolData data) {
     final resultText = data.passed ? 'OK' : 'Nicht OK';
-
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
+    return pw.Row(
       children: [
-        pw.Row(
-          children: [
-            pw.Text(
-              'Resultat:',
-              style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
-            ),
-            pw.SizedBox(width: 70),
-            pw.Text(
-              resultText,
-              style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
-            ),
-          ],
-        ),
-        if (data.failureReasons.isNotEmpty) ...[
-          pw.SizedBox(height: 6),
-          ...data.failureReasons.map((r) => pw.Padding(
-                padding: const pw.EdgeInsets.only(left: 10, bottom: 2),
-                child: pw.Text(
-                  '- $r',
-                  style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
-                ),
-              )),
-        ],
+        pw.Text('Resultat: ', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
+        pw.Text(resultText, style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold)),
       ],
     );
   }
 
-  pw.Widget _buildSignatureSection(ProtocolData data) {
-    final dateStr = Formatters.formatDateTime(DateTime.now());
-
-    final techName = data.technicianName.isNotEmpty
-        ? data.technicianName
-        : (data.author.isNotEmpty ? data.author : 'Monteur');
-
-    return pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
+  pw.Widget _buildSignatureSectionCompact(ProtocolData data) {
+    final techName = data.technicianName.isNotEmpty ? data.technicianName : (data.author.isNotEmpty ? data.author : 'Monteur');
+    return pw.Row(
+      crossAxisAlignment: pw.CrossAxisAlignment.end,
       children: [
-        pw.Text('Datum: $dateStr', style: const pw.TextStyle(fontSize: 11)),
-        pw.SizedBox(height: 20),
-        pw.Row(
-          crossAxisAlignment: pw.CrossAxisAlignment.end,
-          children: [
-            _buildSignatureBlock(
-              hasSignature: data.signature != null,
-              signature: data.signature,
-              name: techName,
-            ),
-            pw.SizedBox(width: 40),
-            _buildSignatureBlock(hasSignature: false, signature: null, name: ''),
-          ],
-        ),
+        _buildSignatureBlockCompact(hasSignature: data.signature != null, signature: data.signature, name: techName),
+        pw.SizedBox(width: 32),
+        _buildSignatureBlockCompact(hasSignature: false, signature: null, name: ''),
       ],
     );
   }
 
-  pw.Widget _buildSignatureBlock({
-    required bool hasSignature,
-    Uint8List? signature,
-    required String name,
-  }) {
-    return pw.Expanded(
-      child: pw.Column(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          pw.Text(
-            'Unterschrift:',
-            style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
-          ),
-          pw.SizedBox(height: 4),
-          if (hasSignature && signature != null)
-            pw.Image(pw.MemoryImage(signature), width: 200, height: 70)
-          else
-            pw.Container(
-              width: 200,
-              decoration: const pw.BoxDecoration(
-                border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5)),
-              ),
-              child: pw.SizedBox(height: 55),
-            ),
-          pw.SizedBox(height: 4),
-          pw.Text(
-            'Name: ${name.isNotEmpty ? name : "____________________________"}',
-            style: const pw.TextStyle(fontSize: 10),
-          ),
-        ],
-      ),
+  pw.Widget _buildSignatureBlockCompact({required bool hasSignature, Uint8List? signature, required String name}) {
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text('Unterschrift:', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold)),
+        pw.SizedBox(height: 2),
+        if (hasSignature && signature != null)
+          pw.Image(pw.MemoryImage(signature), width: 160, height: 55)
+        else
+          pw.Container(width: 160, decoration: const pw.BoxDecoration(border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5))), child: pw.SizedBox(height: 45)),
+        pw.Text('Name: ${name.isNotEmpty ? name : "________________"}', style: const pw.TextStyle(fontSize: 8)),
+      ],
     );
   }
 
-  pw.Widget _buildFooter() {
+  pw.Widget _buildFooterCompact() {
     return pw.Container(
-      padding: const pw.EdgeInsets.only(top: 10),
-      decoration: const pw.BoxDecoration(
-        border: pw.Border(top: pw.BorderSide(color: PdfColors.grey300, width: 0.5)),
-      ),
-      child: pw.Column(
-        children: [
-          pw.RichText(
-            text: pw.TextSpan(
-              style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
-              children: [
-                const pw.TextSpan(text: 'LEHMANN 2000 AG '),
-                pw.TextSpan(text: '|', style: pw.TextStyle(color: PdfColors.red700)),
-                const pw.TextSpan(text: ' Muellerweg 5 '),
-                pw.TextSpan(text: '|', style: pw.TextStyle(color: PdfColors.red700)),
-                const pw.TextSpan(text: ' 4800 Zofingen '),
-                pw.TextSpan(text: '|', style: pw.TextStyle(color: PdfColors.red700)),
-                const pw.TextSpan(text: ' +41 62 745 30 30'),
-              ],
-            ),
-          ),
-          pw.SizedBox(height: 2),
-          pw.RichText(
-            text: pw.TextSpan(
-              style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
-              children: [
-                const pw.TextSpan(text: 'info@lehmann2000.ch '),
-                pw.TextSpan(text: '|', style: pw.TextStyle(color: PdfColors.red700)),
-                const pw.TextSpan(text: ' CHE-108.359.764 MWST'),
-              ],
-            ),
-          ),
-        ],
-      ),
+      padding: const pw.EdgeInsets.only(top: 6),
+      decoration: const pw.BoxDecoration(border: pw.Border(top: pw.BorderSide(color: PdfColors.grey300, width: 0.5))),
+      child: pw.Text('LEHMANN 2000 AG | Muellerweg 5 | 4800 Zofingen | +41 62 745 30 30 | info@lehmann2000.ch', style: const pw.TextStyle(fontSize: 7, color: PdfColors.grey700)),
     );
   }
 }

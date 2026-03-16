@@ -219,6 +219,37 @@ publishing:
 
 ## Troubleshooting
 
+### Keine IPA – systematisch prüfen
+
+**Schritt 1: Wo schlägt der Build fehl?**
+
+1. Codemagic öffnen → **Apps** → Prezio → **Builds**
+2. Letzten iOS-Build anklicken → **Build logs** öffnen
+3. Suche nach der **ersten roten Fehlermeldung**:
+   - **"xcode-project use-profiles"** schlägt fehl → Code Signing in Codemagic fehlt (siehe Schritt 2)
+   - **"flutter build ipa"** schlägt fehl → oft Signierungsproblem oder fehlendes Profil
+   - **"No matching provisioning profile"** → Provisioning Profile für `ch.soleco.prezioV2` fehlt
+   - **"Development Team required"** → API Key oder Zertifikat nicht verbunden
+
+**Schritt 2: Code Signing in Codemagic prüfen**
+
+1. **Team settings** (oder Personal account) → **codemagic.yaml settings** → **Code signing identities**
+2. **iOS certificates:** Muss mindestens ein **Apple Distribution** Zertifikat vorhanden sein
+3. **iOS provisioning profiles:** Muss ein **App Store** Profil für `ch.soleco.prezioV2` vorhanden sein
+4. Falls leer: **Teil 4** der Anleitung durchgehen (Zertifikat + Profil hinzufügen)
+
+**Schritt 3: Test ohne Signierung**
+
+Workflow **"iOS Build (Unsigned)"** starten. Wenn dieser eine IPA liefert, liegt das Problem bei der Signierung. Wenn auch dieser fehlschlägt, liegt es am Flutter/Xcode-Build.
+
+**Schritt 4: TestFlight – IPA kommt nicht an**
+
+- Codemagic liefert IPA, aber TestFlight zeigt nichts?
+- **Lösung A:** In Codemagic unter **Publishing** → **App Store Connect** hinzufügen (API Key, App ID). Dann wird die IPA automatisch hochgeladen.
+- **Lösung B:** IPA aus Codemagic herunterladen und mit der **Transporter-App** (Mac/Windows) manuell zu App Store Connect hochladen.
+
+---
+
 | Problem | Lösung |
 |--------|--------|
 | "Key not found" | API Key in Codemagic richtig hochgeladen? Issuer ID + Key ID prüfen |

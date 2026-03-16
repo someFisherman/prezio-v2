@@ -1,8 +1,5 @@
-import 'dart:async';
 import 'dart:typed_data';
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:signature/signature.dart';
 import '../models/models.dart';
@@ -96,7 +93,7 @@ class _SignatureScreenState extends ConsumerState<SignatureScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Druckverlauf (wird ins Protokoll eingebettet)',
+              'Druckverlauf (wird als separates PDF gespeichert)',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -243,8 +240,6 @@ class _SignatureScreenState extends ConsumerState<SignatureScreen> {
       return;
     }
 
-    final chartBytes = await _captureChartViaOverlay();
-
     if (!mounted) return;
 
     showDialog(
@@ -266,7 +261,6 @@ class _SignatureScreenState extends ConsumerState<SignatureScreen> {
       final updatedProtocol = widget.protocolData.copyWith(
         signature: signatureBytes,
         signatureDate: DateTime.now(),
-        chartImage: chartBytes,
       );
 
       ref.read(protocolDataProvider.notifier).state = updatedProtocol;
@@ -291,86 +285,4 @@ class _SignatureScreenState extends ConsumerState<SignatureScreen> {
     }
   }
 
-  /// Chart in eigenem Overlay rendern und erfassen - garantiert sichtbar.
-  Future<Uint8List?> _captureChartViaOverlay() async {
-    final completer = Completer<Uint8List?>();
-
-    showDialog<void>(
-      context: context,
-      barrierDismissible: false,
-      barrierColor: Colors.white,
-      builder: (ctx) => _ChartCaptureOverlay(
-        measurement: widget.protocolData.measurement,
-        onCaptured: (bytes) {
-          Navigator.of(ctx).pop();
-          completer.complete(bytes);
-        },
-      ),
-    );
-
-    return completer.future;
-  }
-}
-
-class _ChartCaptureOverlay extends StatefulWidget {
-  final Measurement measurement;
-  final void Function(Uint8List? bytes) onCaptured;
-
-  const _ChartCaptureOverlay({
-    required this.measurement,
-    required this.onCaptured,
-  });
-
-  @override
-  State<_ChartCaptureOverlay> createState() => _ChartCaptureOverlayState();
-}
-
-class _ChartCaptureOverlayState extends State<_ChartCaptureOverlay> {
-  final GlobalKey _key = GlobalKey();
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _captureAfterBuild());
-  }
-
-  Future<void> _captureAfterBuild() async {
-    await Future.delayed(const Duration(milliseconds: 500));
-
-    try {
-      final boundary = _key.currentContext?.findRenderObject()
-          as RenderRepaintBoundary?;
-      if (boundary != null && !boundary.debugNeedsPaint) {
-        final image = await boundary.toImage(pixelRatio: 2.0);
-        final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-        if (byteData != null) {
-          final bytes = byteData.buffer.asUint8List();
-          if (bytes.length > 100) {
-            widget.onCaptured(bytes);
-            return;
-          }
-        }
-      }
-    } catch (_) {}
-    widget.onCaptured(null);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.white,
-      insetPadding: const EdgeInsets.all(16),
-      child: RepaintBoundary(
-        key: _key,
-        child: SizedBox(
-          width: 450,
-          height: 350,
-          child: PressureChart(
-            measurement: widget.measurement,
-            height: 350,
-          ),
-        ),
-      ),
-    );
-  }
 }

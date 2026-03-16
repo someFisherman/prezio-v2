@@ -6,12 +6,13 @@ import '../utils/formatters.dart';
 
 class EmailService {
   Future<void> sendProtocol({
-    required String pdfPath,
+    required String protocolPdfPath,
+    required String chartPdfPath,
     String? csvPath,
     required ProtocolData protocolData,
     String? recipientEmail,
   }) async {
-    final attachments = <String>[pdfPath];
+    final attachments = <String>[protocolPdfPath, chartPdfPath];
     
     if (csvPath != null) {
       attachments.add(csvPath);
