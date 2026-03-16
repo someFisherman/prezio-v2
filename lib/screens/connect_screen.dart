@@ -6,7 +6,6 @@ import 'package:http/http.dart' as http;
 import '../providers/providers.dart';
 import '../utils/constants.dart';
 import 'recorder_screen.dart';
-import 'settings_screen.dart';
 
 class ConnectScreen extends ConsumerStatefulWidget {
   const ConnectScreen({super.key});
@@ -79,7 +78,15 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
         }
       }
 
-      if (mounted) setState(() => _statusText = 'Authentifizierung fehlgeschlagen');
+      // Fallback: Recorder erreichbar aber kein /auth/key Endpoint
+      // (alter Pi-Code) → trotzdem durchlassen
+      _pollTimer?.cancel();
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const RecorderScreen()),
+        );
+      }
     } catch (_) {
       if (mounted) setState(() => _statusText = 'Bitte mit Prezio Recorder WLAN verbinden');
     } finally {
@@ -93,15 +100,6 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
       appBar: AppBar(
         title: const Text(AppConstants.appName),
         automaticallyImplyLeading: false,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings),
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const SettingsScreen()),
-            ),
-          ),
-        ],
       ),
       body: SafeArea(
         child: Center(
