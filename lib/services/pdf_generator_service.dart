@@ -108,6 +108,7 @@ class PdfGeneratorService {
 
     final pMin = ChartDataHelper.roundedMinY(measurement);
     final pMax = ChartDataHelper.roundedMaxY(measurement);
+    final pRange = pMax - pMin;
     final totalSec = measurement.duration.inSeconds.toDouble();
     final pressureSpots = ChartDataHelper.smoothedPressureSpots(measurement);
     final tempSpots = ChartDataHelper.smoothedTempSpots(measurement, pMin, pMax);
@@ -117,6 +118,13 @@ class PdfGeneratorService {
 
     final tMin = measurement.minTemperature;
     final tMax = measurement.maxTemperature;
+    final tRange = tMax - tMin;
+
+    final rightTempLabels = yTicks.reversed.map((p) {
+      if (pRange < 0.01) return '${tMin.toStringAsFixed(1)}°C';
+      final t = tMin + (p - pMin) / pRange * tRange;
+      return '${t.toStringAsFixed(1)}°C';
+    }).toList();
 
     final dateStr = Formatters.formatDateTime(measurement.startTime);
     final objectName = data.objectName.isNotEmpty ? data.objectName : '-';
@@ -125,43 +133,32 @@ class PdfGeneratorService {
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.a4.landscape,
-        margin: const pw.EdgeInsets.only(left: 40, right: 40, top: 24, bottom: 24),
+        margin: const pw.EdgeInsets.only(left: 16, right: 16, top: 14, bottom: 10),
         build: (context) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
-            // Kopfzeile: Logo + Bezugsdaten
             pw.Row(
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              crossAxisAlignment: pw.CrossAxisAlignment.center,
               children: [
                 if (logo != null)
-                  pw.Image(logo, width: 180, height: 50, fit: pw.BoxFit.contain),
+                  pw.Image(logo, width: 130, height: 36, fit: pw.BoxFit.contain),
                 if (logo != null)
-                  pw.SizedBox(width: 16),
+                  pw.SizedBox(width: 10),
+                pw.Text('Druckverlauf', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                pw.SizedBox(width: 10),
                 pw.Expanded(
-                  child: pw.Column(
-                    crossAxisAlignment: pw.CrossAxisAlignment.start,
-                    children: [
-                      pw.Text('Druckverlauf', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
-                      pw.SizedBox(height: 2),
-                      pw.Text('Objekt: $objectName  |  Projekt: $projectName  |  $dateStr', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
-                    ],
+                  child: pw.Text(
+                    'Objekt: $objectName  |  Projekt: $projectName  |  $dateStr',
+                    style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey700),
                   ),
                 ),
               ],
             ),
-            pw.SizedBox(height: 8),
-            // Achsenbeschriftungen links (bar) und unten (Zeit)
+            pw.SizedBox(height: 4),
             pw.Expanded(
               child: pw.Row(
                 crossAxisAlignment: pw.CrossAxisAlignment.stretch,
                 children: [
-                  // Y-Achse Label
-                  pw.Transform.rotateBox(
-                    angle: -3.14159 / 2,
-                    child: pw.Text('Druck (bar)', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.blue)),
-                  ),
-                  pw.SizedBox(width: 4),
-                  // Chart
                   pw.Expanded(
                     child: pw.Chart(
                       grid: pw.CartesianGrid(
@@ -174,10 +171,10 @@ class PdfGeneratorService {
                         ),
                         yAxis: pw.FixedAxis(
                           yTicks,
-                          format: (v) => v.toStringAsFixed(v % 1 == 0 ? 0 : 1),
+                          format: (v) => '${v.toStringAsFixed(v % 1 == 0 ? 0 : 1)} bar',
                           divisions: true,
                           divisionsColor: PdfColors.grey300,
-                          textStyle: const pw.TextStyle(fontSize: 7),
+                          textStyle: pw.TextStyle(fontSize: 7, color: PdfColors.blue800),
                         ),
                       ),
                       overlay: pw.ChartLegend(
@@ -189,34 +186,51 @@ class PdfGeneratorService {
                           legend: 'Druck (bar)',
                           data: pressureSpots.map((s) => pw.PointChartValue(s.x, s.y)).toList(),
                           color: PdfColors.blue,
-                          lineWidth: 2.5,
+                          lineWidth: 2,
                           drawPoints: false,
                           drawSurface: true,
-                          surfaceOpacity: 0.08,
+                          surfaceOpacity: 0.06,
                           isCurved: true,
                           smoothness: 0.4,
                         ),
                         pw.LineDataSet(
-                          legend: 'Temperatur (${tMin.toStringAsFixed(1)} - ${tMax.toStringAsFixed(1)} °C)',
+                          legend: 'Temperatur (°C)',
                           data: tempSpots.map((s) => pw.PointChartValue(s.x, s.y)).toList(),
                           color: PdfColors.orange,
                           lineWidth: 1.5,
                           drawPoints: false,
-                          lineColor: PdfColors.orange,
                           isCurved: true,
                           smoothness: 0.4,
                         ),
                       ],
                     ),
                   ),
+                  pw.SizedBox(width: 2),
+                  pw.Padding(
+                    padding: const pw.EdgeInsets.only(bottom: 16),
+                    child: pw.Column(
+                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: rightTempLabels.map((label) =>
+                        pw.Text(label, style: pw.TextStyle(fontSize: 7, color: PdfColors.orange)),
+                      ).toList(),
+                    ),
+                  ),
                 ],
               ),
             ),
-            // X-Achse Label
-            pw.Center(
-              child: pw.Padding(
-                padding: const pw.EdgeInsets.only(top: 4),
-                child: pw.Text('Zeit', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(top: 2),
+              child: pw.Row(
+                children: [
+                  pw.Text('← Druck (bar)', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, color: PdfColors.blue)),
+                  pw.Expanded(
+                    child: pw.Center(
+                      child: pw.Text('Zeit', style: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold, color: PdfColors.grey700)),
+                    ),
+                  ),
+                  pw.Text('Temperatur (°C) →', style: pw.TextStyle(fontSize: 7, fontWeight: pw.FontWeight.bold, color: PdfColors.orange)),
+                ],
               ),
             ),
           ],
