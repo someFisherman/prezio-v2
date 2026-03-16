@@ -63,22 +63,33 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
           .timeout(const Duration(seconds: 3));
 
       if (keyResp.statusCode == 200) {
-        final data = jsonDecode(keyResp.body);
-        final key = data['key'] as String?;
+        try {
+          final data = jsonDecode(keyResp.body);
+          final key = data['key'] as String?;
 
-        if (key != null && key.isNotEmpty) {
-          _pollTimer?.cancel();
-          if (mounted) {
-            Navigator.pushReplacement(
-              context,
-              MaterialPageRoute(builder: (_) => const RecorderScreen()),
-            );
+          if (key != null && key.isNotEmpty) {
+            _pollTimer?.cancel();
+            if (mounted) {
+              Navigator.pushReplacement(
+                context,
+                MaterialPageRoute(builder: (_) => const RecorderScreen()),
+              );
+            }
+            return;
           }
-          return;
+          if (mounted) {
+            setState(() => _statusText = 'Key leer - Recorder neu starten');
+          }
+        } catch (e) {
+          if (mounted) {
+            setState(() => _statusText = 'Antwort ungueltig: ${keyResp.body.substring(0, (keyResp.body.length).clamp(0, 80))}');
+          }
+        }
+      } else {
+        if (mounted) {
+          setState(() => _statusText = 'Auth-Endpoint fehlt (HTTP ${keyResp.statusCode}) - Recorder-Software updaten');
         }
       }
-
-      if (mounted) setState(() => _statusText = 'Authentifizierung fehlgeschlagen');
     } catch (_) {
       if (mounted) setState(() => _statusText = 'Bitte mit Prezio Recorder WLAN verbinden');
     } finally {
