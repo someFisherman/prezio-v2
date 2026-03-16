@@ -55,5 +55,7 @@
 	<false/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Prezio benötigt den Standort um Wetterdaten für die Druckprüfung abzurufen.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Prezio benötigt den Standort um Wetterdaten für die Druckprüfung abzurufen.</string>
 </dict>
 </plist>
