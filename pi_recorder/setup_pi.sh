@@ -7,6 +7,7 @@
 #
 # Compatible with: Raspberry Pi OS Bookworm (64-bit Lite)
 # Uses: NetworkManager (nmcli) instead of hostapd/dhcpcd
+# Works OFFLINE if pyserial wheel is present in script dir.
 #
 # Usage: sudo bash setup_pi.sh
 # ============================================================
@@ -17,6 +18,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SSID="${1:-Prezio-Recorder}"
 PASSPHRASE="${2:-prezio2026}"
 PI_IP="192.168.4.1"
+PYTHON=""
 
 echo "=============================="
 echo "Prezio Pi Recorder Setup"
@@ -32,32 +34,55 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
-# ------ System packages ------
-echo "[1/5] Installing system packages..."
-apt-get update -qq
-apt-get install -y -qq python3 python3-pip python3-venv
+# ------ System packages (online or skip) ------
+echo "[1/5] Checking system packages..."
+if apt-get update -qq 2>/dev/null; then
+    apt-get install -y -qq python3 python3-pip python3-venv 2>/dev/null || true
+    echo "  Packages installed (online)"
+else
+    echo "  No internet - using pre-installed packages"
+fi
 
 # ------ Python environment ------
 echo "[2/5] Setting up Python environment..."
 VENV_DIR="$SCRIPT_DIR/venv"
-if [ ! -d "$VENV_DIR" ]; then
-    python3 -m venv "$VENV_DIR"
+WHL=$(ls "$SCRIPT_DIR"/pyserial-*.whl 2>/dev/null | head -1)
+
+if python3 -m venv "$VENV_DIR" 2>/dev/null; then
+    PYTHON="$VENV_DIR/bin/python3"
+    if [ -n "$WHL" ]; then
+        "$VENV_DIR/bin/pip" install --quiet "$WHL"
+        echo "  pyserial installed from local wheel (venv)"
+    else
+        "$VENV_DIR/bin/pip" install --quiet -r "$SCRIPT_DIR/requirements.txt" 2>/dev/null || true
+        echo "  pyserial installed from pip (venv)"
+    fi
+else
+    PYTHON="python3"
+    echo "  venv not available, using system Python"
+    if [ -n "$WHL" ]; then
+        python3 -m pip install --break-system-packages "$WHL" 2>/dev/null \
+            || pip3 install --break-system-packages "$WHL" 2>/dev/null \
+            || pip3 install "$WHL" 2>/dev/null \
+            || true
+        echo "  pyserial installed from local wheel (system)"
+    else
+        python3 -m pip install --break-system-packages pyserial 2>/dev/null \
+            || pip3 install pyserial 2>/dev/null \
+            || true
+    fi
 fi
-"$VENV_DIR/bin/pip" install --quiet -r "$SCRIPT_DIR/requirements.txt"
 
 # ------ WiFi Access Point via NetworkManager ------
 echo "[3/5] Configuring WiFi Access Point (NetworkManager)..."
 
-# Remove any existing prezio AP connection
 nmcli connection delete prezio-ap 2>/dev/null || true
 
-# Remove any existing WiFi connections on wlan0 to avoid conflicts
 for conn in $(nmcli -t -f NAME,DEVICE connection show | grep ":wlan0" | cut -d: -f1); do
     echo "  Removing existing connection: $conn"
     nmcli connection delete "$conn" 2>/dev/null || true
 done
 
-# Create the AP connection
 nmcli connection add \
     type wifi \
     ifname wlan0 \
@@ -72,9 +97,7 @@ nmcli connection add \
     wifi-sec.key-mgmt wpa-psk \
     wifi-sec.psk "$PASSPHRASE"
 
-# Activate immediately
 nmcli connection up prezio-ap
-
 echo "  AP active: $SSID on $PI_IP"
 
 # ------ Data directory ------
@@ -84,6 +107,11 @@ chown -R pi:pi "$SCRIPT_DIR/data" 2>/dev/null || true
 
 # ------ Systemd Service ------
 echo "[5/5] Installing systemd service..."
+
+EXEC_PYTHON="$PYTHON"
+if [ -f "$VENV_DIR/bin/python3" ]; then
+    EXEC_PYTHON="$VENV_DIR/bin/python3"
+fi
 
 cat > /etc/systemd/system/prezio-recorder.service << EOF
 [Unit]
@@ -95,7 +123,7 @@ Wants=network-online.target
 Type=simple
 User=root
 WorkingDirectory=$SCRIPT_DIR
-ExecStart=$VENV_DIR/bin/python3 $SCRIPT_DIR/pi_recorder.py
+ExecStart=$EXEC_PYTHON $SCRIPT_DIR/pi_recorder.py
 Restart=always
 RestartSec=5
 StandardOutput=journal
@@ -109,7 +137,6 @@ systemctl daemon-reload
 systemctl enable prezio-recorder
 systemctl start prezio-recorder
 
-# Verify service started
 sleep 2
 if systemctl is-active --quiet prezio-recorder; then
     echo "  Service running OK"
