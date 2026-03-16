@@ -1,7 +1,7 @@
 name: prezio_v2
 description: "Prezio - Druckprotokoll App für iOS und Android"
 publish_to: 'none'
-version: 2.3.0+1
+version: 2.3.0+2
 
 environment:
   sdk: ^3.9.2
