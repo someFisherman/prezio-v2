@@ -16,7 +16,7 @@ API Endpoints:
   POST /recording/start   - Start recording
   POST /recording/stop    - Stop recording
   GET  /recording/status  - Current recording status
-  POST /wifi/off          - Turn off WiFi AP (restored on next power cycle)
+  POST /wifi/off          - Turn off WiFi AP for 120s, then auto-restart
   POST /reboot            - Reboot the Prezio Recorder
 """
 
@@ -591,14 +591,19 @@ class PrezioHTTPHandler(http.server.BaseHTTPRequestHandler):
             return
 
         if path == "/wifi/off":
-            self._send_json({"status": "wifi_off"})
-            _log("WiFi-off requested via API")
-            def _stop_wifi():
+            WIFI_PAUSE_SECONDS = 120
+            self._send_json({"status": "wifi_off", "restart_in_seconds": WIFI_PAUSE_SECONDS})
+            _log("WiFi-off requested via API – will restart in %ds", WIFI_PAUSE_SECONDS)
+            def _cycle_wifi():
                 time.sleep(2)
-                subprocess.run(["sudo", "ip", "link", "set", "wlan0", "down"], check=False)
                 subprocess.run(["sudo", "systemctl", "stop", "hostapd"], check=False)
-                _log("WiFi AP stopped. Will be back on next power cycle.")
-            threading.Thread(target=_stop_wifi, daemon=True).start()
+                subprocess.run(["sudo", "ip", "link", "set", "wlan0", "down"], check=False)
+                _log("WiFi AP stopped. Waiting %ds before restart…", WIFI_PAUSE_SECONDS)
+                time.sleep(WIFI_PAUSE_SECONDS)
+                subprocess.run(["sudo", "ip", "link", "set", "wlan0", "up"], check=False)
+                subprocess.run(["sudo", "systemctl", "start", "hostapd"], check=False)
+                _log("WiFi AP restarted automatically.")
+            threading.Thread(target=_cycle_wifi, daemon=True).start()
             return
 
         if path == "/reboot":

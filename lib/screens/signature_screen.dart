@@ -251,9 +251,8 @@ class _SignatureScreenState extends ConsumerState<SignatureScreen> {
           height: 400,
           width: 800,
         );
-      } catch (_) {
-        signatureBytes = await _signatureController.toPngBytes();
-      }
+      } catch (_) {}
+      signatureBytes ??= await _signatureController.toPngBytes();
 
       final updatedProtocol = widget.protocolData.copyWith(
         signature: signatureBytes,
@@ -283,25 +282,19 @@ class _SignatureScreenState extends ConsumerState<SignatureScreen> {
   }
 
   Future<Uint8List?> _captureChart() async {
-    try {
-      // Wait for the current frame to finish rendering
-      await Future.delayed(const Duration(milliseconds: 100));
+    for (int attempt = 0; attempt < 3; attempt++) {
+      try {
+        await Future.delayed(Duration(milliseconds: 200 + attempt * 300));
 
-      final boundary = _chartKey.currentContext?.findRenderObject()
-          as RenderRepaintBoundary?;
-      if (boundary == null || boundary.debugNeedsPaint) {
-        await Future.delayed(const Duration(milliseconds: 300));
-      }
+        final boundary = _chartKey.currentContext?.findRenderObject()
+            as RenderRepaintBoundary?;
+        if (boundary == null || boundary.debugNeedsPaint) continue;
 
-      final boundary2 = _chartKey.currentContext?.findRenderObject()
-          as RenderRepaintBoundary?;
-      if (boundary2 == null) return null;
-
-      final image = await boundary2.toImage(pixelRatio: 3.0);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      return byteData?.buffer.asUint8List();
-    } catch (_) {
-      return null;
+        final image = await boundary.toImage(pixelRatio: 3.0);
+        final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+        if (byteData != null) return byteData.buffer.asUint8List();
+      } catch (_) {}
     }
+    return null;
   }
 }

@@ -24,39 +24,33 @@ class PdfGeneratorService {
     final pdf = pw.Document();
     final logo = await _loadLehmannLogo();
 
-    // Seite 1: Protokoll
     pdf.addPage(
-      pw.Page(
+      pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
         margin: const pw.EdgeInsets.all(50),
-        build: (context) => pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            _buildHeader(logo),
-            pw.SizedBox(height: 30),
-            _buildLocationDate(data),
-            pw.SizedBox(height: 30),
-            _buildTitle(),
-            pw.SizedBox(height: 20),
-            _buildProjectInfo(data),
-            pw.SizedBox(height: 20),
-            _buildIntroText(),
-            pw.SizedBox(height: 20),
-            _buildPressureInfo(data),
-            pw.SizedBox(height: 20),
-            _buildTestType(),
-            pw.SizedBox(height: 30),
-            _buildResult(data),
-            pw.SizedBox(height: 30),
-            _buildSignatureSection(data),
-            pw.Spacer(),
-            _buildFooter(),
-          ],
-        ),
+        header: (_) => _buildHeader(logo),
+        footer: (_) => _buildFooter(),
+        build: (context) => [
+          pw.SizedBox(height: 20),
+          _buildLocationDate(data),
+          pw.SizedBox(height: 24),
+          _buildTitle(),
+          pw.SizedBox(height: 16),
+          _buildProjectInfo(data),
+          pw.SizedBox(height: 16),
+          _buildIntroText(),
+          pw.SizedBox(height: 16),
+          _buildPressureInfo(data),
+          pw.SizedBox(height: 16),
+          _buildTestType(),
+          pw.SizedBox(height: 24),
+          _buildResult(data),
+          pw.SizedBox(height: 30),
+          _buildSignatureSection(data),
+        ],
       ),
     );
 
-    // Seite 2: Druckverlauf-Kurve
     if (data.chartImage != null) {
       pdf.addPage(
         pw.Page(
@@ -105,41 +99,40 @@ class PdfGeneratorService {
 
   pw.Widget _buildHeader(pw.MemoryImage? logo) {
     if (logo != null) {
-      return pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          pw.Image(logo, width: 400, height: 120, fit: pw.BoxFit.contain),
-        ],
+      return pw.Padding(
+        padding: const pw.EdgeInsets.only(bottom: 10),
+        child: pw.Row(
+          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+          children: [
+            pw.Image(logo, width: 400, height: 120, fit: pw.BoxFit.contain),
+          ],
+        ),
       );
     }
 
-    return pw.Row(
-      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-      crossAxisAlignment: pw.CrossAxisAlignment.start,
-      children: [
-        pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.start,
-          children: [
-            pw.Text(
-              'LEHMANN 2000',
-              style: pw.TextStyle(
-                fontSize: 28,
-                fontWeight: pw.FontWeight.bold,
-                color: PdfColors.red700,
-              ),
+    return pw.Padding(
+      padding: const pw.EdgeInsets.only(bottom: 10),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            'LEHMANN 2000',
+            style: pw.TextStyle(
+              fontSize: 28,
+              fontWeight: pw.FontWeight.bold,
+              color: PdfColors.red700,
             ),
-            pw.Text(
-              'Ihr Partner fuer Waermetechnik',
-              style: pw.TextStyle(
-                fontSize: 12,
-                fontStyle: pw.FontStyle.italic,
-                color: PdfColors.grey600,
-              ),
+          ),
+          pw.Text(
+            'Ihr Partner fuer Waermetechnik',
+            style: pw.TextStyle(
+              fontSize: 12,
+              fontStyle: pw.FontStyle.italic,
+              color: PdfColors.grey600,
             ),
-          ],
-        ),
-      ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -166,15 +159,15 @@ class PdfGeneratorService {
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
         _buildLabelValue('Objekt / Anlage:', data.objectName),
-        pw.SizedBox(height: 8),
+        pw.SizedBox(height: 6),
         _buildLabelValue('Projekt:', data.projectName),
-        pw.SizedBox(height: 8),
+        pw.SizedBox(height: 6),
         pw.Text(
           'Verfasser: ${data.author.isNotEmpty ? data.author : data.technicianName}',
           style: const pw.TextStyle(fontSize: 11),
         ),
         if (data.location != null && data.location!.isNotEmpty) ...[
-          pw.SizedBox(height: 8),
+          pw.SizedBox(height: 6),
           _buildLabelValue('Standort:', data.location!),
         ],
       ],
@@ -244,7 +237,7 @@ class PdfGeneratorService {
 
   pw.Widget _buildInfoRow(String label, String value) {
     return pw.Padding(
-      padding: const pw.EdgeInsets.symmetric(vertical: 4),
+      padding: const pw.EdgeInsets.symmetric(vertical: 3),
       child: pw.Row(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
@@ -311,6 +304,10 @@ class PdfGeneratorService {
         ? Formatters.formatDate(data.signatureDate!)
         : Formatters.formatDate(DateTime.now());
 
+    final techName = data.technicianName.isNotEmpty
+        ? data.technicianName
+        : (data.author.isNotEmpty ? data.author : 'Monteur');
+
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
@@ -319,31 +316,31 @@ class PdfGeneratorService {
         pw.Row(
           crossAxisAlignment: pw.CrossAxisAlignment.end,
           children: [
-            // Links: Monteur (mit digitaler Unterschrift)
             pw.Expanded(
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
                 children: [
                   pw.Text(
-                    'Monteur: ${data.technicianName}',
+                    'Monteur:',
                     style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
                   ),
-                  pw.SizedBox(height: 5),
+                  pw.SizedBox(height: 4),
                   if (data.signature != null)
-                    pw.Image(pw.MemoryImage(data.signature!), width: 180, height: 70)
+                    pw.Image(pw.MemoryImage(data.signature!), width: 200, height: 80)
                   else
                     pw.Container(
-                      width: 180,
+                      width: 200,
                       decoration: const pw.BoxDecoration(
                         border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5)),
                       ),
-                      child: pw.SizedBox(height: 50),
+                      child: pw.SizedBox(height: 60),
                     ),
+                  pw.SizedBox(height: 4),
+                  pw.Text(techName, style: const pw.TextStyle(fontSize: 10)),
                 ],
               ),
             ),
             pw.SizedBox(width: 40),
-            // Rechts: Offenes Feld fuer Projektleiter / Auftraggeber
             pw.Expanded(
               child: pw.Column(
                 crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -352,13 +349,13 @@ class PdfGeneratorService {
                     'Unterschrift:',
                     style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
                   ),
-                  pw.SizedBox(height: 5),
+                  pw.SizedBox(height: 4),
                   pw.Container(
-                    width: 180,
+                    width: 200,
                     decoration: const pw.BoxDecoration(
                       border: pw.Border(bottom: pw.BorderSide(color: PdfColors.black, width: 0.5)),
                     ),
-                    child: pw.SizedBox(height: 50),
+                    child: pw.SizedBox(height: 60),
                   ),
                   pw.SizedBox(height: 4),
                   pw.Text(

@@ -133,53 +133,84 @@ class PressureChart extends StatelessWidget {
     );
   }
 
-  /// Downsample to ~maxPoints using averaging for a smooth curve.
-  List<Sample> _downsample(int maxPoints) {
+  /// Build smoothed pressure+temperature spot lists.
+  /// 1. Downsample to ~120 points via bucket averaging
+  /// 2. Apply moving average (window=7) for a silky smooth line
+  List<FlSpot> _smoothedPressureSpots() {
+    final raw = _downsampledSpots(
+      (s) => s.pressureRounded,
+    );
+    return _movingAverage(raw, 7);
+  }
+
+  List<FlSpot> _smoothedTempSpots(double pMin, double pMax) {
+    final tMin = measurement.minTemperature;
+    final tMax = measurement.maxTemperature;
+    final tRange = tMax - tMin;
+    final pRange = pMax - pMin;
+
+    final raw = _downsampledSpots((s) {
+      if (tRange < 0.01) return (pMin + pMax) / 2;
+      return pMin + (s.temperatureRounded - tMin) / tRange * pRange;
+    });
+    return _movingAverage(raw, 7);
+  }
+
+  List<FlSpot> _downsampledSpots(double Function(Sample s) yFn) {
     final all = measurement.samples;
-    if (all.length <= maxPoints) return all;
+    const maxPoints = 120;
+    if (all.length <= maxPoints) {
+      return all.map((s) {
+        final x = s.timestamp.difference(measurement.startTime).inSeconds.toDouble();
+        return FlSpot(x, yFn(s));
+      }).toList();
+    }
 
-    final result = <Sample>[];
+    final spots = <FlSpot>[];
     final bucketSize = all.length / maxPoints;
-
     for (int i = 0; i < maxPoints; i++) {
       final start = (i * bucketSize).floor();
       final end = ((i + 1) * bucketSize).floor().clamp(0, all.length);
       if (start >= end) continue;
 
-      double pSum = 0, tSum = 0;
+      double ySum = 0;
+      double xSum = 0;
       for (int j = start; j < end; j++) {
-        pSum += all[j].pressureRounded;
-        tSum += all[j].temperatureRounded;
+        ySum += yFn(all[j]);
+        xSum += all[j].timestamp.difference(measurement.startTime).inSeconds.toDouble();
       }
       final count = end - start;
-      final mid = all[start + count ~/ 2];
-
-      result.add(Sample(
-        index: mid.index,
-        timestamp: mid.timestamp,
-        timestampUtc: mid.timestampUtc,
-        pressureBar: pSum / count,
-        temperatureC: tSum / count,
-        pressureRounded: double.parse((pSum / count).toStringAsFixed(2)),
-        temperatureRounded: double.parse((tSum / count).toStringAsFixed(2)),
-      ));
+      spots.add(FlSpot(xSum / count, ySum / count));
     }
+    return spots;
+  }
 
+  /// Weighted moving average for extra smoothness.
+  List<FlSpot> _movingAverage(List<FlSpot> spots, int window) {
+    if (spots.length < window) return spots;
+    final half = window ~/ 2;
+    final result = <FlSpot>[];
+    for (int i = 0; i < spots.length; i++) {
+      final lo = max(0, i - half);
+      final hi = min(spots.length - 1, i + half);
+      double ySum = 0;
+      double wSum = 0;
+      for (int j = lo; j <= hi; j++) {
+        final w = 1.0 + half - (i - j).abs();
+        ySum += spots[j].y * w;
+        wSum += w;
+      }
+      result.add(FlSpot(spots[i].x, ySum / wSum));
+    }
     return result;
   }
 
   // --- Pressure line ---
   LineChartBarData _pressureLine() {
-    final samples = _downsample(300);
-    final spots = <FlSpot>[];
-    for (final s in samples) {
-      final x = s.timestamp.difference(measurement.startTime).inSeconds.toDouble();
-      spots.add(FlSpot(x, s.pressureRounded));
-    }
     return LineChartBarData(
-      spots: spots,
+      spots: _smoothedPressureSpots(),
       isCurved: true,
-      curveSmoothness: 0.35,
+      curveSmoothness: 0.4,
       preventCurveOverShooting: true,
       color: Colors.blue,
       barWidth: 2.5,
@@ -192,29 +223,12 @@ class PressureChart extends StatelessWidget {
     );
   }
 
-  // --- Temperature line (mapped to pressure Y axis) ---
+  // --- Temperature line ---
   LineChartBarData _temperatureLine(double pMin, double pMax) {
-    final samples = _downsample(300);
-    final spots = <FlSpot>[];
-    final tMin = measurement.minTemperature;
-    final tMax = measurement.maxTemperature;
-    final tRange = tMax - tMin;
-    final pRange = pMax - pMin;
-
-    for (final s in samples) {
-      final x = s.timestamp.difference(measurement.startTime).inSeconds.toDouble();
-      double y;
-      if (tRange < 0.01) {
-        y = (pMin + pMax) / 2;
-      } else {
-        y = pMin + (s.temperatureRounded - tMin) / tRange * pRange;
-      }
-      spots.add(FlSpot(x, y));
-    }
     return LineChartBarData(
-      spots: spots,
+      spots: _smoothedTempSpots(pMin, pMax),
       isCurved: true,
-      curveSmoothness: 0.35,
+      curveSmoothness: 0.4,
       preventCurveOverShooting: true,
       color: Colors.orange,
       barWidth: 1.5,
@@ -244,7 +258,6 @@ class PressureChart extends StatelessWidget {
     return (raw / step).ceil() * step;
   }
 
-  /// Pick a "nice" interval that gives 4-8 grid lines.
   double _niceInterval(double range) {
     if (range <= 0) return 1.0;
     final rough = range / 5;
@@ -263,7 +276,6 @@ class PressureChart extends StatelessWidget {
     return nice * mag;
   }
 
-  /// Time axis: pick an interval that gives ~5-8 labels.
   double _timeInterval(double totalSec) {
     const candidates = [
       30.0, 60.0, 120.0, 300.0, 600.0, 900.0, 1800.0, 3600.0, 7200.0, 14400.0, 21600.0,
@@ -320,8 +332,6 @@ class PressureChart extends StatelessWidget {
     }
     return best;
   }
-
-  // --- Legend ---
 
   Widget _buildLegend() {
     return Row(

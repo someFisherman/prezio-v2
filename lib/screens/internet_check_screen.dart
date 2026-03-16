@@ -164,6 +164,7 @@ class _InternetCheckScreenState extends ConsumerState<InternetCheckScreen> {
                 const SizedBox(height: 16),
                 Text(
                   'Das Prezio Recorder WLAN wurde abgeschaltet.\n'
+                  'Es startet automatisch in ca. 2 Minuten neu.\n'
                   'Bitte mit normalem WiFi oder Mobilfunk verbinden.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
