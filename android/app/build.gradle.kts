@@ -28,8 +28,9 @@ android {
 
     signingConfigs {
         create("release") {
-            if (System.getenv("CI").toBoolean()) {
-                storeFile = file(System.getenv("CM_KEYSTORE_PATH") ?: "/tmp/keystore.jks")
+            val ksPath = System.getenv("CM_KEYSTORE_PATH")
+            if (ksPath != null && file(ksPath).exists()) {
+                storeFile = file(ksPath)
                 storePassword = System.getenv("CM_KEYSTORE_PASSWORD") ?: ""
                 keyAlias = System.getenv("CM_KEY_ALIAS") ?: ""
                 keyPassword = System.getenv("CM_KEY_PASSWORD") ?: ""
@@ -39,7 +40,8 @@ android {
 
     buildTypes {
         release {
-            signingConfig = if (System.getenv("CI").toBoolean()) {
+            val ksPath = System.getenv("CM_KEYSTORE_PATH")
+            signingConfig = if (ksPath != null && file(ksPath).exists()) {
                 signingConfigs.getByName("release")
             } else {
                 signingConfigs.getByName("debug")
