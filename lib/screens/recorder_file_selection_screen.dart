@@ -70,11 +70,18 @@ class _RecorderFileSelectionScreenState
 
   String _extractName(String filename) {
     final withoutExt = filename.replaceAll('.csv', '');
-    final parts = withoutExt.split('_');
-    if (parts.length > 4) {
-      return parts.sublist(4).join(' ');
+    // Format: messung_YYYY-MM-DD_HH-MM-SS_Name_Parts.csv
+    final match = RegExp(r'^messung_\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2}_(.+)$')
+        .firstMatch(withoutExt);
+    if (match != null) {
+      return match.group(1)!.replaceAll('_', ' ');
     }
-    return filename;
+    // Fallback: alles nach dem 3. Underscore
+    final parts = withoutExt.split('_');
+    if (parts.length > 3) {
+      return parts.sublist(3).join(' ');
+    }
+    return withoutExt;
   }
 
   Future<void> _loadAndNavigate(FileInfo file) async {

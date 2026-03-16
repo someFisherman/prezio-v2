@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../models/models.dart';
@@ -39,174 +40,249 @@ class PressureChart extends StatelessWidget {
   }
 
   LineChartData _buildChartData() {
+    final totalSec = measurement.duration.inSeconds.toDouble();
+    final pMin = _roundedMinY();
+    final pMax = _roundedMaxY();
+    final pInterval = _niceInterval(pMax - pMin);
+    final tInterval = _timeInterval(totalSec);
+
     return LineChartData(
       gridData: FlGridData(
         show: true,
         drawVerticalLine: true,
-        horizontalInterval: _calculatePressureInterval(),
-        verticalInterval: _calculateTimeInterval(),
-        getDrawingHorizontalLine: (value) {
-          return FlLine(color: Colors.grey.withValues(alpha: 0.2), strokeWidth: 1);
-        },
-        getDrawingVerticalLine: (value) {
-          return FlLine(color: Colors.grey.withValues(alpha: 0.2), strokeWidth: 1);
-        },
+        horizontalInterval: pInterval,
+        verticalInterval: tInterval,
+        getDrawingHorizontalLine: (_) =>
+            FlLine(color: Colors.grey.withValues(alpha: 0.3), strokeWidth: 0.5),
+        getDrawingVerticalLine: (_) =>
+            FlLine(color: Colors.grey.withValues(alpha: 0.3), strokeWidth: 0.5),
       ),
       titlesData: FlTitlesData(
         show: true,
+        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
         rightTitles: showTemperature
             ? AxisTitles(
-                axisNameWidget: const Text('Temp (°C)', style: TextStyle(fontSize: 10)),
                 sideTitles: SideTitles(
                   showTitles: true,
-                  reservedSize: 45,
-                  interval: _calculateTempInterval(),
-                  getTitlesWidget: _rightTitleWidget,
+                  reservedSize: 42,
+                  interval: pInterval,
+                  getTitlesWidget: (value, meta) => _tempLabel(value, meta, pMin, pMax),
                 ),
               )
             : const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-        topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
         bottomTitles: AxisTitles(
-          axisNameWidget: const Text('Zeit'),
           sideTitles: SideTitles(
             showTitles: true,
-            reservedSize: 30,
-            interval: _calculateTimeInterval(),
-            getTitlesWidget: _bottomTitleWidget,
+            reservedSize: 28,
+            interval: tInterval,
+            getTitlesWidget: _timeLabel,
           ),
         ),
         leftTitles: AxisTitles(
-          axisNameWidget: const Text('Druck (bar)', style: TextStyle(fontSize: 10)),
           sideTitles: SideTitles(
             showTitles: true,
-            interval: _calculatePressureInterval(),
-            reservedSize: 50,
-            getTitlesWidget: _leftTitleWidget,
+            reservedSize: 48,
+            interval: pInterval,
+            getTitlesWidget: (value, meta) {
+              if (value == meta.max || value == meta.min) {
+                return const SizedBox.shrink();
+              }
+              return SideTitleWidget(
+                meta: meta,
+                child: Text(
+                  value.toStringAsFixed(value % 1 == 0 ? 0 : 1),
+                  style: const TextStyle(fontSize: 10),
+                ),
+              );
+            },
           ),
         ),
       ),
       borderData: FlBorderData(
         show: true,
-        border: Border.all(color: Colors.grey.withValues(alpha: 0.5)),
+        border: Border.all(color: Colors.grey.shade400, width: 0.5),
       ),
       minX: 0,
-      maxX: measurement.duration.inSeconds.toDouble(),
-      minY: _calculateMinY(),
-      maxY: _calculateMaxY(),
+      maxX: totalSec,
+      minY: pMin,
+      maxY: pMax,
       lineBarsData: [
-        _buildPressureLine(),
-        if (showTemperature) _buildTemperatureLine(),
+        _pressureLine(),
+        if (showTemperature) _temperatureLine(pMin, pMax),
       ],
       lineTouchData: LineTouchData(
         touchTooltipData: LineTouchTooltipData(
-          getTooltipItems: (touchedSpots) {
-            return touchedSpots.map((spot) {
-              final seconds = spot.x.toInt();
-              final sampleIndex = _findClosestSampleIndex(seconds);
-              if (sampleIndex < 0) return null;
-              final sample = measurement.samples[sampleIndex];
-
-              if (spot.barIndex == 0) {
-                return LineTooltipItem(
-                  '${Formatters.formatPressureWithUnit(sample.pressureRounded)}\n'
-                  '${Formatters.formatTime(sample.timestamp)}',
-                  const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                );
-              } else {
-                return LineTooltipItem(
-                  '${Formatters.formatTemperatureWithUnit(sample.temperatureRounded)}\n'
-                  '${Formatters.formatTime(sample.timestamp)}',
-                  const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                );
-              }
-            }).toList();
-          },
+          getTooltipItems: (spots) => spots.map((spot) {
+            final idx = _closestIndex(spot.x.toInt());
+            if (idx < 0) return null;
+            final s = measurement.samples[idx];
+            if (spot.barIndex == 0) {
+              return LineTooltipItem(
+                '${Formatters.formatPressure(s.pressureRounded)} bar\n'
+                '${Formatters.formatTime(s.timestamp)}',
+                const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+              );
+            }
+            return LineTooltipItem(
+              '${Formatters.formatTemperature(s.temperatureRounded)} °C',
+              const TextStyle(color: Colors.white, fontSize: 12),
+            );
+          }).toList(),
         ),
       ),
     );
   }
 
-  int _findClosestSampleIndex(int seconds) {
-    if (measurement.samples.isEmpty) return -1;
-    int bestIndex = 0;
-    int bestDiff = 999999;
-    for (int i = 0; i < measurement.samples.length; i++) {
-      final sampleSeconds = measurement.samples[i].timestamp.difference(measurement.startTime).inSeconds;
-      final diff = (sampleSeconds - seconds).abs();
-      if (diff < bestDiff) {
-        bestDiff = diff;
-        bestIndex = i;
-      }
-    }
-    return bestIndex;
-  }
-
-  LineChartBarData _buildPressureLine() {
+  // --- Pressure line ---
+  LineChartBarData _pressureLine() {
     final spots = <FlSpot>[];
-    for (int i = 0; i < measurement.samples.length; i++) {
-      final sample = measurement.samples[i];
-      final x = sample.timestamp.difference(measurement.startTime).inSeconds.toDouble();
-      final y = double.parse(sample.pressureRounded.toStringAsFixed(2));
-      spots.add(FlSpot(x, y));
+    for (final s in measurement.samples) {
+      final x = s.timestamp.difference(measurement.startTime).inSeconds.toDouble();
+      spots.add(FlSpot(x, s.pressureRounded));
     }
-
     return LineChartBarData(
       spots: spots,
       isCurved: true,
-      curveSmoothness: 0.2,
+      curveSmoothness: 0.15,
       color: Colors.blue,
       barWidth: 2,
       isStrokeCapRound: true,
-      dotData: FlDotData(
-        show: spots.length < 50,
-        getDotPainter: (spot, percent, bar, index) {
-          return FlDotCirclePainter(
-            radius: 3,
-            color: Colors.blue,
-            strokeWidth: 1,
-            strokeColor: Colors.white,
-          );
-        },
-      ),
+      dotData: const FlDotData(show: false),
       belowBarData: BarAreaData(
         show: true,
-        color: Colors.blue.withValues(alpha: 0.1),
+        color: Colors.blue.withValues(alpha: 0.08),
       ),
     );
   }
 
-  LineChartBarData _buildTemperatureLine() {
+  // --- Temperature line (mapped to pressure Y axis) ---
+  LineChartBarData _temperatureLine(double pMin, double pMax) {
     final spots = <FlSpot>[];
-    final pressureRange = _calculateMaxY() - _calculateMinY();
-    final tempRange = measurement.maxTemperature - measurement.minTemperature;
+    final tMin = measurement.minTemperature;
+    final tMax = measurement.maxTemperature;
+    final tRange = tMax - tMin;
+    final pRange = pMax - pMin;
 
-    for (int i = 0; i < measurement.samples.length; i++) {
-      final sample = measurement.samples[i];
-      final x = sample.timestamp.difference(measurement.startTime).inSeconds.toDouble();
-      final tempRounded = double.parse(sample.temperatureRounded.toStringAsFixed(2));
-      double mappedY;
-      if (tempRange < 0.01) {
-        mappedY = (_calculateMinY() + _calculateMaxY()) / 2;
+    for (final s in measurement.samples) {
+      final x = s.timestamp.difference(measurement.startTime).inSeconds.toDouble();
+      double y;
+      if (tRange < 0.01) {
+        y = (pMin + pMax) / 2;
       } else {
-        mappedY = _calculateMinY() +
-            (tempRounded - measurement.minTemperature) /
-                tempRange *
-                pressureRange;
+        y = pMin + (s.temperatureRounded - tMin) / tRange * pRange;
       }
-      spots.add(FlSpot(x, mappedY));
+      spots.add(FlSpot(x, y));
     }
-
     return LineChartBarData(
       spots: spots,
       isCurved: true,
-      curveSmoothness: 0.2,
+      curveSmoothness: 0.15,
       color: Colors.orange,
-      barWidth: 2,
+      barWidth: 1.5,
       isStrokeCapRound: true,
       dotData: const FlDotData(show: false),
-      dashArray: [5, 5],
+      dashArray: [5, 4],
     );
   }
+
+  // --- Axis helpers ---
+
+  double _roundedMinY() {
+    final minP = measurement.minPressure;
+    final range = measurement.maxPressure - minP;
+    final padding = max(range * 0.15, 0.5);
+    final raw = minP - padding;
+    final step = _niceInterval(range + 2 * padding);
+    return (raw / step).floor() * step;
+  }
+
+  double _roundedMaxY() {
+    final maxP = measurement.maxPressure;
+    final range = maxP - measurement.minPressure;
+    final padding = max(range * 0.15, 0.5);
+    final raw = maxP + padding;
+    final step = _niceInterval(range + 2 * padding);
+    return (raw / step).ceil() * step;
+  }
+
+  /// Pick a "nice" interval that gives 4-8 grid lines.
+  double _niceInterval(double range) {
+    if (range <= 0) return 1.0;
+    final rough = range / 5;
+    final mag = pow(10, (log(rough) / ln10).floor()).toDouble();
+    final norm = rough / mag;
+    double nice;
+    if (norm < 1.5) {
+      nice = 1;
+    } else if (norm < 3) {
+      nice = 2;
+    } else if (norm < 7) {
+      nice = 5;
+    } else {
+      nice = 10;
+    }
+    return nice * mag;
+  }
+
+  /// Time axis: pick an interval that gives ~5-8 labels.
+  double _timeInterval(double totalSec) {
+    const candidates = [
+      30.0, 60.0, 120.0, 300.0, 600.0, 900.0, 1800.0, 3600.0, 7200.0, 14400.0, 21600.0,
+    ];
+    for (final c in candidates) {
+      if (totalSec / c <= 10) return c;
+    }
+    return 21600.0;
+  }
+
+  Widget _timeLabel(double value, TitleMeta meta) {
+    if (value == meta.max) return const SizedBox.shrink();
+    final sec = value.toInt();
+    String text;
+    if (sec == 0) {
+      text = '0';
+    } else if (sec < 3600) {
+      text = '${sec ~/ 60}min';
+    } else {
+      final h = sec ~/ 3600;
+      final m = (sec % 3600) ~/ 60;
+      text = m > 0 ? '${h}h${m.toString().padLeft(2, '0')}' : '${h}h';
+    }
+    return SideTitleWidget(
+      meta: meta,
+      child: Text(text, style: const TextStyle(fontSize: 9)),
+    );
+  }
+
+  Widget _tempLabel(double value, TitleMeta meta, double pMin, double pMax) {
+    if (value == meta.max || value == meta.min) return const SizedBox.shrink();
+    final tMin = measurement.minTemperature;
+    final tMax = measurement.maxTemperature;
+    final tRange = tMax - tMin;
+    final pRange = pMax - pMin;
+    if (pRange < 0.001 || tRange < 0.01) return const SizedBox.shrink();
+    final temp = tMin + (value - pMin) / pRange * tRange;
+    return SideTitleWidget(
+      meta: meta,
+      child: Text('${temp.toStringAsFixed(1)}°', style: const TextStyle(fontSize: 9)),
+    );
+  }
+
+  int _closestIndex(int seconds) {
+    if (measurement.samples.isEmpty) return -1;
+    int best = 0;
+    int bestD = 999999;
+    for (int i = 0; i < measurement.samples.length; i++) {
+      final d = (measurement.samples[i].timestamp.difference(measurement.startTime).inSeconds - seconds).abs();
+      if (d < bestD) {
+        bestD = d;
+        best = i;
+      }
+    }
+    return best;
+  }
+
+  // --- Legend ---
 
   Widget _buildLegend() {
     return Row(
@@ -233,84 +309,6 @@ class PressureChart extends StatelessWidget {
         const SizedBox(width: 6),
         Text(label, style: const TextStyle(fontSize: 12)),
       ],
-    );
-  }
-
-  Widget _rightTitleWidget(double value, TitleMeta meta) {
-    final pressureRange = _calculateMaxY() - _calculateMinY();
-    final tempRange = measurement.maxTemperature - measurement.minTemperature;
-    double temp;
-    if (pressureRange < 0.001 || tempRange < 0.01) {
-      temp = measurement.minTemperature;
-    } else {
-      temp = measurement.minTemperature +
-          (value - _calculateMinY()) / pressureRange * tempRange;
-    }
-    return SideTitleWidget(
-      meta: meta,
-      child: Text(temp.toStringAsFixed(1), style: const TextStyle(fontSize: 10)),
-    );
-  }
-
-  double _calculateMinY() {
-    final min = measurement.minPressure;
-    final padding = (measurement.maxPressure - min) * 0.1;
-    return (min - padding).clamp(-1.0, double.infinity);
-  }
-
-  double _calculateMaxY() {
-    final max = measurement.maxPressure;
-    final padding = (max - measurement.minPressure) * 0.1;
-    return max + padding;
-  }
-
-  double _calculatePressureInterval() {
-    final range = _calculateMaxY() - _calculateMinY();
-    if (range <= 0.1) return 0.01;
-    if (range <= 0.5) return 0.05;
-    if (range <= 1) return 0.1;
-    if (range <= 5) return 0.5;
-    return 1.0;
-  }
-
-  double _calculateTempInterval() {
-    final tempRange = measurement.maxTemperature - measurement.minTemperature;
-    final pressureRange = _calculateMaxY() - _calculateMinY();
-    if (tempRange < 0.01 || pressureRange < 0.001) return 1.0;
-    final pressureInterval = _calculatePressureInterval();
-    return pressureInterval;
-  }
-
-  double _calculateTimeInterval() {
-    final totalSeconds = measurement.duration.inSeconds;
-    if (totalSeconds <= 60) return 10;
-    if (totalSeconds <= 300) return 30;
-    if (totalSeconds <= 600) return 60;
-    if (totalSeconds <= 1800) return 300;
-    if (totalSeconds <= 3600) return 600;
-    return 1800;
-  }
-
-  Widget _bottomTitleWidget(double value, TitleMeta meta) {
-    final seconds = value.toInt();
-    String text;
-    if (seconds < 60) {
-      text = '${seconds}s';
-    } else if (seconds < 3600) {
-      text = '${seconds ~/ 60}m';
-    } else {
-      text = '${seconds ~/ 3600}h${(seconds % 3600) ~/ 60}m';
-    }
-    return SideTitleWidget(
-      meta: meta,
-      child: Text(text, style: const TextStyle(fontSize: 10)),
-    );
-  }
-
-  Widget _leftTitleWidget(double value, TitleMeta meta) {
-    return SideTitleWidget(
-      meta: meta,
-      child: Text(Formatters.formatPressure(value), style: const TextStyle(fontSize: 10)),
     );
   }
 }

@@ -32,7 +32,7 @@ def generate_csv(
     medium: str,
     duration_hours: float,
     target_pressure: float,
-    interval_s: int = 10,
+    interval_s: int = 60,
     base_temp: float = 22.0,
 ):
     start = datetime(2026, 3, 14, 8, 0, 0)

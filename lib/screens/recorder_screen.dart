@@ -15,7 +15,7 @@ class RecorderScreen extends ConsumerStatefulWidget {
 
 class _RecorderScreenState extends ConsumerState<RecorderScreen> {
   final _nameController = TextEditingController(text: 'Messung');
-  final _intervalController = TextEditingController(text: '10');
+  final _intervalController = TextEditingController(text: '60');
   int _selectedPN = 25;
   String _selectedMedium = 'air';
 

@@ -109,7 +109,7 @@ class PdfGeneratorService {
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.Image(logo, width: 300, height: 90, fit: pw.BoxFit.contain),
+          pw.Image(logo, width: 400, height: 120, fit: pw.BoxFit.contain),
         ],
       );
     }
