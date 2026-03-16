@@ -68,7 +68,7 @@ class PdfGeneratorService {
               pw.SizedBox(height: 8),
               pw.Text(
                 'Objekt: ${data.objectName.isNotEmpty ? data.objectName : "-"}  |  '
-                'Datum: ${Formatters.formatDate(data.measurement.startTime)}  |  '
+                'Datum: ${Formatters.formatDateTime(DateTime.now())}  |  '
                 'Dauer: ${data.testDuration}',
                 style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey700),
               ),
@@ -137,12 +137,13 @@ class PdfGeneratorService {
   }
 
   pw.Widget _buildLocationDate(ProtocolData data) {
-    final date = Formatters.formatDate(data.measurement.startTime);
+    final now = DateTime.now();
+    final dateStr = Formatters.formatDateTime(now);
     final locationText = data.location != null && data.location!.isNotEmpty
         ? data.location!.split(',').first.trim()
         : 'Zofingen';
     return pw.Text(
-      '$locationText / $date',
+      '$locationText / $dateStr',
       style: const pw.TextStyle(fontSize: 11, color: PdfColors.blue800),
     );
   }
@@ -300,9 +301,7 @@ class PdfGeneratorService {
   }
 
   pw.Widget _buildSignatureSection(ProtocolData data) {
-    final dateStr = data.signatureDate != null
-        ? Formatters.formatDate(data.signatureDate!)
-        : Formatters.formatDate(DateTime.now());
+    final dateStr = Formatters.formatDateTime(DateTime.now());
 
     final techName = data.technicianName.isNotEmpty
         ? data.technicianName
