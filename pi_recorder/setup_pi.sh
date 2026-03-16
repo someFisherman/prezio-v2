@@ -103,7 +103,7 @@ echo "  AP active: $SSID on $PI_IP"
 # ------ Data directory ------
 echo "[4/5] Creating data directory..."
 mkdir -p "$SCRIPT_DIR/data"
-chown -R pi:pi "$SCRIPT_DIR/data" 2>/dev/null || true
+chown -R preziouser:preziouser "$SCRIPT_DIR/data" 2>/dev/null || chown -R pi:pi "$SCRIPT_DIR/data" 2>/dev/null || true
 
 # ------ Systemd Service ------
 echo "[5/5] Installing systemd service..."

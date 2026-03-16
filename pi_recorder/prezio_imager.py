@@ -5,17 +5,15 @@ Soleco AG
 
 import ctypes
 import ctypes.wintypes
-import io
 import json
 import lzma
 import os
-import struct
 import subprocess
 import sys
 import threading
+import time
 import tkinter as tk
 from tkinter import ttk, messagebox
-from pathlib import Path
 from urllib.request import urlopen, Request
 
 # ============================================================
@@ -27,23 +25,42 @@ PI_OS_IMG = "2025-05-13-raspios-bookworm-arm64-lite.img"
 PYSERIAL_URL = "https://files.pythonhosted.org/packages/07/bc/587a445451b253b285629263eb51c2d8e9bcea4fc97826266d186f96f558/pyserial-3.5-py2.py3-none-any.whl"
 PYSERIAL_WHL = "pyserial-3.5-py2.py3-none-any.whl"
 
-PI_USER = "pi"
-PI_PASS = "prezio2026"
+PI_USER     = "preziouser"
+PI_PASS     = "Prezio2000!"
 PI_HOSTNAME = "prezio-recorder"
-WIFI_SSID = "Prezio-Recorder"
-WIFI_PASS = "prezio2026"
+WIFI_SSID   = "Prezio-Recorder"
+WIFI_PASS   = "prezio2026"
 
-COL_BG       = "#1a1a2e"
-COL_SURFACE  = "#16213e"
-COL_CARD     = "#0f3460"
-COL_PRIMARY  = "#1565C0"
-COL_ACCENT   = "#42A5F5"
-COL_SUCCESS  = "#4CAF50"
-COL_ERROR    = "#E53935"
-COL_WARNING  = "#FFA726"
-COL_TEXT     = "#e0e0e0"
-COL_TEXT_DIM = "#90a4ae"
-COL_WHITE    = "#ffffff"
+# Kolibri Design: Orange + Weiss
+COL_BG        = "#FAFAFA"
+COL_SURFACE   = "#FFFFFF"
+COL_CARD      = "#FFFFFF"
+COL_CARD_BDR  = "#E0E0E0"
+COL_PRIMARY   = "#F57C00"
+COL_PRIMARY_D = "#E65100"
+COL_ACCENT    = "#FF9800"
+COL_SUCCESS   = "#43A047"
+COL_ERROR     = "#D32F2F"
+COL_TEXT      = "#212121"
+COL_TEXT_SEC  = "#616161"
+COL_TEXT_DIM  = "#9E9E9E"
+COL_WHITE     = "#FFFFFF"
+COL_HDR_BG    = "#F57C00"
+
+# Hide all PowerShell/console popups
+_NO_WINDOW = 0x08000000
+
+def _si_hidden():
+    si = subprocess.STARTUPINFO()
+    si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    si.wShowWindow = 0
+    return si
+
+def _run_ps(cmd, timeout=20):
+    return subprocess.run(
+        ["powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", cmd],
+        capture_output=True, text=True, timeout=timeout,
+        creationflags=_NO_WINDOW, startupinfo=_si_hidden())
 
 # ============================================================
 # Win32 API for raw disk writing
@@ -90,7 +107,7 @@ def write_chunk(h, data):
     return written.value
 
 # ============================================================
-# Disk enumeration via WMI (PowerShell)
+# Disk enumeration (hidden PowerShell)
 # ============================================================
 def get_removable_disks():
     ps = (
@@ -99,8 +116,7 @@ def get_removable_disks():
         "} | Select-Object Number, FriendlyName, Size, BusType | ConvertTo-Json"
     )
     try:
-        r = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
-            capture_output=True, text=True, timeout=15)
+        r = _run_ps(ps, timeout=15)
         if r.returncode != 0 or not r.stdout.strip():
             return []
         data = json.loads(r.stdout)
@@ -121,8 +137,7 @@ def get_boot_drive_letter(disk_num):
         "}"
     )
     try:
-        r = subprocess.run(["powershell", "-NoProfile", "-Command", ps],
-            capture_output=True, text=True, timeout=20)
+        r = _run_ps(ps, timeout=20)
         letter = r.stdout.strip()
         if letter and len(letter) == 1 and os.path.exists(f"{letter}:\\config.txt"):
             return letter
@@ -144,9 +159,9 @@ echo "==== Prezio First Boot - $(date) ===="
 
 FIRSTUSER=$(getent passwd 1000 | cut -d: -f1)
 if [ -z "$FIRSTUSER" ]; then
-    useradd -m -G sudo,adm,dialout,audio,video,plugdev,games,users,input,netdev,gpio,i2c,spi pi
+    useradd -m -G sudo,adm,dialout,audio,video,plugdev,games,users,input,netdev,gpio,i2c,spi {PI_USER}
 fi
-echo "pi:{PI_PASS}" | chpasswd
+echo "{PI_USER}:{PI_PASS}" | chpasswd
 
 echo "{PI_HOSTNAME}" > /etc/hostname
 sed -i "s/127.0.1.1.*/127.0.1.1\\t{PI_HOSTNAME}/" /etc/hosts
@@ -157,14 +172,14 @@ systemctl start ssh
 sleep 5
 
 SRC=/boot/firmware/prezio_setup
-DST=/home/pi/prezio-v2/pi_recorder
+DST=/home/{PI_USER}/prezio-v2/pi_recorder
 mkdir -p $DST
 cp $SRC/pi_recorder.py $DST/
 cp $SRC/setup_pi.sh $DST/
 cp $SRC/requirements.txt $DST/
 cp $SRC/howto.txt $DST/ 2>/dev/null
 cp $SRC/pyserial-*.whl $DST/ 2>/dev/null
-chown -R pi:pi /home/pi/prezio-v2
+chown -R {PI_USER}:{PI_USER} /home/{PI_USER}/prezio-v2
 
 cd $DST
 bash setup_pi.sh
@@ -183,8 +198,8 @@ exit 0
 class PrezioImager(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("PrezioImager")
-        self.geometry("520x640")
+        self.title("PrezioImager - Soleco AG")
+        self.geometry("540x680")
         self.resizable(False, False)
         self.configure(bg=COL_BG)
 
@@ -196,138 +211,155 @@ class PrezioImager(tk.Tk):
         self.flashing = False
 
         self._build_ui()
-        self._refresh_disks()
+        threading.Thread(target=self._refresh_disks_async, daemon=True).start()
 
     def _get_script_dir(self):
         if getattr(sys, 'frozen', False):
             return os.path.dirname(sys.executable)
         return os.path.dirname(os.path.abspath(__file__))
 
-    # ---- UI ----
     def _build_ui(self):
-        # Header
-        hdr = tk.Frame(self, bg=COL_SURFACE, height=80)
+        # ---- Header bar (orange) ----
+        hdr = tk.Frame(self, bg=COL_HDR_BG, height=70)
         hdr.pack(fill="x")
         hdr.pack_propagate(False)
 
-        tk.Label(hdr, text="PrezioImager", font=("Segoe UI", 22, "bold"),
-                 bg=COL_SURFACE, fg=COL_WHITE).pack(side="left", padx=20, pady=15)
-        tk.Label(hdr, text="Soleco AG", font=("Segoe UI", 10),
-                 bg=COL_SURFACE, fg=COL_TEXT_DIM).pack(side="left", pady=15)
-        tk.Label(hdr, text="Pi Zero 2 W", font=("Segoe UI", 10),
-                 bg=COL_SURFACE, fg=COL_ACCENT).pack(side="right", padx=20, pady=15)
+        hdr_inner = tk.Frame(hdr, bg=COL_HDR_BG)
+        hdr_inner.pack(fill="both", expand=True, padx=24)
 
-        # Separator
-        tk.Frame(self, bg=COL_PRIMARY, height=3).pack(fill="x")
+        tk.Label(hdr_inner, text="PrezioImager", font=("Segoe UI", 24, "bold"),
+                 bg=COL_HDR_BG, fg=COL_WHITE).pack(side="left", pady=12)
 
-        # Main content
-        main = tk.Frame(self, bg=COL_BG, padx=24, pady=16)
+        right_hdr = tk.Frame(hdr_inner, bg=COL_HDR_BG)
+        right_hdr.pack(side="right", pady=12)
+        tk.Label(right_hdr, text="Soleco AG", font=("Segoe UI", 10, "bold"),
+                 bg=COL_HDR_BG, fg=COL_WHITE).pack(anchor="e")
+        tk.Label(right_hdr, text="Pi Zero 2 W", font=("Segoe UI", 9),
+                 bg=COL_HDR_BG, fg="#FFE0B2").pack(anchor="e")
+
+        # ---- Main content ----
+        main = tk.Frame(self, bg=COL_BG, padx=24, pady=20)
         main.pack(fill="both", expand=True)
 
         # --- SD Card selection ---
-        self._section_label(main, "SD-KARTE")
+        self._section_label(main, "SD-KARTE AUSWAEHLEN")
 
-        disk_frame = tk.Frame(main, bg=COL_CARD, highlightbackground=COL_PRIMARY,
-                              highlightthickness=1)
-        disk_frame.pack(fill="x", pady=(4, 0))
+        card1 = tk.Frame(main, bg=COL_CARD, highlightbackground=COL_CARD_BDR,
+                         highlightthickness=1, bd=0)
+        card1.pack(fill="x", pady=(6, 0))
 
-        self.disk_listbox = tk.Listbox(disk_frame, height=4, font=("Consolas", 11),
+        self.disk_listbox = tk.Listbox(card1, height=3, font=("Segoe UI", 11),
             bg=COL_CARD, fg=COL_TEXT, selectbackground=COL_PRIMARY,
             selectforeground=COL_WHITE, borderwidth=0, highlightthickness=0,
             activestyle="none")
-        self.disk_listbox.pack(fill="x", padx=8, pady=8)
+        self.disk_listbox.pack(fill="x", padx=10, pady=10)
 
         btn_frame = tk.Frame(main, bg=COL_BG)
         btn_frame.pack(fill="x", pady=(8, 0))
 
         self.refresh_btn = tk.Button(btn_frame, text="Aktualisieren",
-            font=("Segoe UI", 10), bg=COL_CARD, fg=COL_TEXT,
-            activebackground=COL_PRIMARY, activeforeground=COL_WHITE,
-            borderwidth=0, padx=16, pady=6, cursor="hand2",
-            command=self._refresh_disks)
+            font=("Segoe UI", 10), bg=COL_WHITE, fg=COL_TEXT,
+            activebackground="#FFF3E0", activeforeground=COL_TEXT,
+            borderwidth=1, relief="solid", padx=14, pady=5, cursor="hand2",
+            command=self._on_refresh)
         self.refresh_btn.pack(side="left")
 
-        # --- Info ---
-        self._section_label(main, "KONFIGURATION", top=16)
+        # --- Config info ---
+        self._section_label(main, "KONFIGURATION", top=18)
 
-        info_frame = tk.Frame(main, bg=COL_CARD, highlightbackground="#2a2a4a",
-                              highlightthickness=1)
-        info_frame.pack(fill="x", pady=(4, 0))
+        card2 = tk.Frame(main, bg=COL_CARD, highlightbackground=COL_CARD_BDR,
+                         highlightthickness=1, bd=0)
+        card2.pack(fill="x", pady=(6, 0))
 
         infos = [
             ("WiFi SSID:", WIFI_SSID),
             ("WiFi Passwort:", WIFI_PASS),
-            ("SSH User:", f"{PI_USER} / {PI_PASS}"),
-            ("IP-Adresse:", "192.168.4.1"),
+            ("SSH User:", PI_USER),
+            ("SSH Passwort:", PI_PASS),
+            ("Pi IP-Adresse:", "192.168.4.1"),
             ("HTTP API:", "http://192.168.4.1:8080"),
         ]
-        for label, value in infos:
-            row = tk.Frame(info_frame, bg=COL_CARD)
-            row.pack(fill="x", padx=12, pady=2)
+        for i, (label, value) in enumerate(infos):
+            row_bg = "#FFF8F0" if i % 2 == 0 else COL_CARD
+            row = tk.Frame(card2, bg=row_bg)
+            row.pack(fill="x")
             tk.Label(row, text=label, font=("Segoe UI", 9),
-                     bg=COL_CARD, fg=COL_TEXT_DIM, width=16, anchor="w").pack(side="left")
+                     bg=row_bg, fg=COL_TEXT_SEC, width=16, anchor="w").pack(side="left", padx=(12, 0), pady=3)
             tk.Label(row, text=value, font=("Segoe UI", 9, "bold"),
-                     bg=COL_CARD, fg=COL_TEXT, anchor="w").pack(side="left")
-        tk.Frame(info_frame, bg=COL_CARD, height=6).pack()
+                     bg=row_bg, fg=COL_TEXT, anchor="w").pack(side="left", pady=3)
+        tk.Frame(card2, bg=COL_CARD, height=4).pack()
 
         # --- Progress ---
-        self._section_label(main, "FORTSCHRITT", top=16)
+        self._section_label(main, "FORTSCHRITT", top=18)
 
         self.progress_var = tk.DoubleVar(value=0)
         style = ttk.Style()
         style.theme_use('default')
-        style.configure("Custom.Horizontal.TProgressbar",
-            troughcolor=COL_CARD, background=COL_PRIMARY,
-            borderwidth=0, lightcolor=COL_PRIMARY, darkcolor=COL_PRIMARY)
+        style.configure("Orange.Horizontal.TProgressbar",
+            troughcolor="#E0E0E0", background=COL_PRIMARY,
+            borderwidth=0, lightcolor=COL_ACCENT, darkcolor=COL_PRIMARY_D)
 
         self.progress_bar = ttk.Progressbar(main, variable=self.progress_var,
-            maximum=100, style="Custom.Horizontal.TProgressbar", length=470)
-        self.progress_bar.pack(fill="x", pady=(4, 0))
+            maximum=100, style="Orange.Horizontal.TProgressbar")
+        self.progress_bar.pack(fill="x", pady=(6, 0), ipady=2)
 
         self.status_label = tk.Label(main, text="Bereit",
-            font=("Segoe UI", 10), bg=COL_BG, fg=COL_TEXT_DIM, anchor="w")
+            font=("Segoe UI", 10), bg=COL_BG, fg=COL_TEXT_SEC, anchor="w")
         self.status_label.pack(fill="x", pady=(4, 0))
 
         # --- Flash button ---
-        tk.Frame(main, bg=COL_BG, height=12).pack()
+        tk.Frame(main, bg=COL_BG, height=14).pack()
 
         self.flash_btn = tk.Button(main, text="SD-KARTE FLASHEN",
-            font=("Segoe UI", 14, "bold"), bg=COL_PRIMARY, fg=COL_WHITE,
-            activebackground=COL_ACCENT, activeforeground=COL_WHITE,
-            borderwidth=0, padx=32, pady=12, cursor="hand2",
+            font=("Segoe UI", 15, "bold"), bg=COL_PRIMARY, fg=COL_WHITE,
+            activebackground=COL_PRIMARY_D, activeforeground=COL_WHITE,
+            borderwidth=0, padx=32, pady=14, cursor="hand2",
             command=self._on_flash)
         self.flash_btn.pack(fill="x")
 
-        # Footer
-        footer = tk.Frame(self, bg=COL_SURFACE, height=32)
+        # ---- Footer ----
+        footer = tk.Frame(self, bg="#FFF3E0", height=36)
         footer.pack(fill="x", side="bottom")
         footer.pack_propagate(False)
-        tk.Label(footer, text="SD rein  >  Flashen  >  In Pi stecken  >  Fertig",
-                 font=("Segoe UI", 9), bg=COL_SURFACE, fg=COL_TEXT_DIM).pack(pady=6)
+        tk.Label(footer, text="SD rein  \u2192  Flashen  \u2192  In Pi stecken  \u2192  Fertig",
+                 font=("Segoe UI", 9), bg="#FFF3E0", fg=COL_TEXT_SEC).pack(pady=8)
 
     def _section_label(self, parent, text, top=0):
         tk.Label(parent, text=text, font=("Segoe UI", 8, "bold"),
-                 bg=COL_BG, fg=COL_ACCENT).pack(fill="x", pady=(top, 0), anchor="w")
+                 bg=COL_BG, fg=COL_PRIMARY).pack(fill="x", pady=(top, 0), anchor="w")
 
-    # ---- Disk handling ----
-    def _refresh_disks(self):
+    # ---- Disk handling (async, no popup) ----
+    def _on_refresh(self):
+        if self.flashing:
+            return
+        self.refresh_btn.configure(state="disabled")
         self.disk_listbox.delete(0, tk.END)
-        self.disks = get_removable_disks()
-        if not self.disks:
+        self.disk_listbox.insert(0, "  Suche SD-Karten...")
+        threading.Thread(target=self._refresh_disks_async, daemon=True).start()
+
+    def _refresh_disks_async(self):
+        disks = get_removable_disks()
+        self.after(0, lambda: self._update_disk_list(disks))
+
+    def _update_disk_list(self, disks):
+        self.disks = disks
+        self.disk_listbox.delete(0, tk.END)
+        if not disks:
             self.disk_listbox.insert(0, "  Keine SD-Karte gefunden. Einstecken & Aktualisieren.")
         else:
-            for d in self.disks:
+            for d in disks:
                 size_gb = round(d['Size'] / (1024**3), 1)
                 self.disk_listbox.insert(tk.END,
-                    f"  Disk {d['Number']}:  {size_gb} GB  -  {d['FriendlyName']}")
+                    f"  Disk {d['Number']}:  {size_gb} GB  \u2013  {d['FriendlyName']}")
             self.disk_listbox.selection_set(0)
+        self.refresh_btn.configure(state="normal")
 
     # ---- Flash process ----
     def _on_flash(self):
         if self.flashing:
             return
         if not self.disks:
-            messagebox.showwarning("Keine SD-Karte", "Bitte SD-Karte einstecken und Aktualisieren.")
+            messagebox.showwarning("Keine SD-Karte", "Bitte SD-Karte einstecken und Aktualisieren klicken.")
             return
 
         sel = self.disk_listbox.curselection()
@@ -339,7 +371,7 @@ class PrezioImager(tk.Tk):
         size_gb = round(disk['Size'] / (1024**3), 1)
 
         confirm = messagebox.askokcancel("Achtung!",
-            f"Disk {disk['Number']} ({size_gb} GB - {disk['FriendlyName']})\n\n"
+            f"Disk {disk['Number']} ({size_gb} GB \u2013 {disk['FriendlyName']})\n\n"
             "ALLE DATEN WERDEN GELOESCHT!\n\n"
             "Fortfahren?",
             icon="warning")
@@ -347,11 +379,11 @@ class PrezioImager(tk.Tk):
             return
 
         self.flashing = True
-        self.flash_btn.configure(state="disabled", bg="#555555")
+        self.flash_btn.configure(state="disabled", bg="#BDBDBD", fg="#757575")
         self.refresh_btn.configure(state="disabled")
         threading.Thread(target=self._flash_worker, args=(disk,), daemon=True).start()
 
-    def _set_status(self, text, color=COL_TEXT_DIM):
+    def _set_status(self, text, color=COL_TEXT_SEC):
         self.after(0, lambda: self.status_label.configure(text=text, fg=color))
 
     def _set_progress(self, val):
@@ -360,20 +392,21 @@ class PrezioImager(tk.Tk):
     def _flash_done(self, success, msg=""):
         def _do():
             self.flashing = False
-            self.flash_btn.configure(state="normal", bg=COL_PRIMARY)
+            self.flash_btn.configure(state="normal", bg=COL_PRIMARY, fg=COL_WHITE)
             self.refresh_btn.configure(state="normal")
             if success:
                 self._set_status("Fertig!", COL_SUCCESS)
                 self._set_progress(100)
                 messagebox.showinfo("Fertig!",
                     "SD-Karte ist bereit!\n\n"
-                    "1. SD-Karte auswerfen\n"
+                    "1. SD-Karte sicher auswerfen\n"
                     "2. In den Pi Zero 2 W stecken\n"
                     "3. Strom anschliessen\n"
-                    "4. 3-5 Minuten warten\n"
-                    f"5. WiFi '{WIFI_SSID}' verbinden\n"
-                    f"   Passwort: {WIFI_PASS}\n"
-                    "6. http://192.168.4.1:8080 testen")
+                    "4. 3\u20135 Minuten warten\n"
+                    f"5. WiFi \"{WIFI_SSID}\" verbinden\n"
+                    f"    Passwort: {WIFI_PASS}\n\n"
+                    f"SSH: ssh {PI_USER}@192.168.4.1\n"
+                    f"Passwort: {PI_PASS}")
             else:
                 self._set_status(f"Fehler: {msg}", COL_ERROR)
                 messagebox.showerror("Fehler", msg)
@@ -382,7 +415,6 @@ class PrezioImager(tk.Tk):
     def _flash_worker(self, disk):
         disk_num = disk['Number']
         try:
-            # --- Step 1: Download / cache image ---
             img_path = os.path.join(self.cache_dir, PI_OS_IMG)
             if not os.path.exists(img_path):
                 xz_path = os.path.join(self.cache_dir, PI_OS_XZ)
@@ -391,7 +423,7 @@ class PrezioImager(tk.Tk):
                     self._set_progress(0)
                     self._download_file(PI_OS_URL, xz_path)
 
-                self._set_status("Entpacke Image (das dauert 1-2 Min)...")
+                self._set_status("Entpacke Image (1\u20132 Min)...")
                 self._set_progress(0)
                 self._extract_xz(xz_path, img_path)
                 try:
@@ -399,7 +431,6 @@ class PrezioImager(tk.Tk):
                 except OSError:
                     pass
 
-            # --- Step 1b: Download pyserial wheel ---
             whl_path = os.path.join(self.cache_dir, PYSERIAL_WHL)
             if not os.path.exists(whl_path):
                 try:
@@ -411,34 +442,26 @@ class PrezioImager(tk.Tk):
                 except Exception:
                     whl_path = None
 
-            # --- Step 2: Clean disk ---
             self._set_status("Bereite SD-Karte vor...")
             self._set_progress(25)
-            subprocess.run(
-                ["powershell", "-NoProfile", "-Command",
-                 f"'select disk {disk_num}\nclean' | diskpart"],
-                capture_output=True, timeout=30)
-            import time; time.sleep(2)
+            _run_ps(f"'select disk {disk_num}\nclean' | diskpart", timeout=30)
+            time.sleep(2)
 
-            # --- Step 3: Write image ---
             self._set_status("Schreibe Image auf SD-Karte...")
             self._write_image(disk_num, img_path)
 
-            # --- Step 4: Configure boot partition ---
             self._set_status("Konfiguriere Boot-Partition...")
             self._set_progress(90)
 
-            subprocess.run(
-                ["powershell", "-NoProfile", "-Command", "echo rescan | diskpart"],
-                capture_output=True, timeout=15)
-            import time; time.sleep(4)
+            _run_ps("echo rescan | diskpart", timeout=15)
+            time.sleep(4)
 
             boot_letter = None
             for _ in range(15):
                 boot_letter = get_boot_drive_letter(disk_num)
                 if boot_letter:
                     break
-                import time; time.sleep(2)
+                time.sleep(2)
 
             if not boot_letter:
                 self._flash_done(False, "Boot-Partition konnte nicht gefunden werden.")
@@ -458,10 +481,9 @@ class PrezioImager(tk.Tk):
         with urlopen(req, timeout=600) as resp:
             total = int(resp.headers.get('Content-Length', 0))
             downloaded = 0
-            chunk_size = 256 * 1024
             with open(dest, "wb") as f:
                 while True:
-                    chunk = resp.read(chunk_size)
+                    chunk = resp.read(256 * 1024)
                     if not chunk:
                         break
                     f.write(chunk)
@@ -471,7 +493,7 @@ class PrezioImager(tk.Tk):
                         self._set_progress(pct)
                         mb = downloaded // (1024 * 1024)
                         total_mb = total // (1024 * 1024)
-                        self._set_status(f"Lade Pi OS herunter... {mb}/{total_mb} MB")
+                        self._set_status(f"Lade Pi OS... {mb}/{total_mb} MB")
 
     def _extract_xz(self, xz_path, img_path):
         with lzma.open(xz_path) as xz_in:
@@ -489,7 +511,6 @@ class PrezioImager(tk.Tk):
     def _write_image(self, disk_num, img_path):
         phys = f"\\\\.\\PhysicalDrive{disk_num}"
         img_size = os.path.getsize(img_path)
-        buf_size = 1024 * 1024
 
         h = open_disk(phys)
         try:
@@ -497,7 +518,7 @@ class PrezioImager(tk.Tk):
             written = 0
             with open(img_path, "rb") as img:
                 while True:
-                    data = img.read(buf_size)
+                    data = img.read(1024 * 1024)
                     if not data:
                         break
                     write_chunk(h, data)
@@ -515,30 +536,23 @@ class PrezioImager(tk.Tk):
         setup_dir = os.path.join(boot_root, "prezio_setup")
         os.makedirs(setup_dir, exist_ok=True)
 
-        # Enable SSH
         open(os.path.join(boot_root, "ssh"), "w").close()
 
-        # Copy prezio files
         for fname in ["pi_recorder.py", "setup_pi.sh", "requirements.txt", "howto.txt"]:
             src = os.path.join(self.script_dir, fname)
             if os.path.exists(src):
-                dst = os.path.join(setup_dir, fname)
                 with open(src, "rb") as f_in:
-                    with open(dst, "wb") as f_out:
+                    with open(os.path.join(setup_dir, fname), "wb") as f_out:
                         f_out.write(f_in.read())
 
         if whl_path and os.path.exists(whl_path):
-            dst = os.path.join(setup_dir, PYSERIAL_WHL)
             with open(whl_path, "rb") as f_in:
-                with open(dst, "wb") as f_out:
+                with open(os.path.join(setup_dir, PYSERIAL_WHL), "wb") as f_out:
                     f_out.write(f_in.read())
 
-        # Write firstrun.sh (LF line endings)
-        firstrun_path = os.path.join(boot_root, "firstrun.sh")
-        with open(firstrun_path, "wb") as f:
+        with open(os.path.join(boot_root, "firstrun.sh"), "wb") as f:
             f.write(make_firstrun_sh().encode("utf-8"))
 
-        # Modify cmdline.txt
         cmdline_path = os.path.join(boot_root, "cmdline.txt")
         if os.path.exists(cmdline_path):
             with open(cmdline_path, "r") as f:
@@ -560,9 +574,13 @@ def is_admin():
         return False
 
 def run_as_admin():
-    ctypes.windll.shell32.ShellExecuteW(
-        None, "runas", sys.executable,
-        f'"{os.path.abspath(__file__)}"', None, 1)
+    if getattr(sys, 'frozen', False):
+        exe = sys.executable
+    else:
+        exe = sys.executable
+    script = os.path.abspath(__file__) if not getattr(sys, 'frozen', False) else ""
+    args = f'"{script}"' if script else ""
+    ctypes.windll.shell32.ShellExecuteW(None, "runas", exe, args, None, 1)
 
 if __name__ == "__main__":
     if not is_admin():
