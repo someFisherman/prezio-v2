@@ -1,7 +1,7 @@
 name: prezio_v2
 description: "Prezio - Druckprotokoll App für iOS und Android"
 publish_to: 'none'
-version: 1.0.0+1
+version: 2.3.0+1
 
 environment:
   sdk: ^3.9.2
@@ -17,6 +17,7 @@ dependencies:
   
   # HTTP & Networking
   http: ^1.4.0
+  geolocator: ^14.0.2
   
   # Charts
   fl_chart: ^1.0.0
@@ -34,7 +35,6 @@ dependencies:
   # File & Path
   path_provider: ^2.1.5
   share_plus: ^10.1.4
-  file_picker: ^8.1.7
   
   # Local Storage
   shared_preferences: ^2.5.3
@@ -44,7 +44,6 @@ dependencies:
   uuid: ^4.5.1
   csv: ^6.0.0
   crypto: ^3.0.6
-  geolocator: ^14.0.2
 
 dev_dependencies:
   flutter_test:

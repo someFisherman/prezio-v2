@@ -1,27 +1,32 @@
 #!/usr/bin/env python3
 """
-Prezio Pi Recorder - Headless KELLER LEO5 + HTTP API
+Prezio Recorder - Headless KELLER LEO5 + HTTP API
 
-Runs on Raspberry Pi without GUI. Starts automatically via systemd.
+Runs on the Prezio Recorder (Raspberry Pi) without GUI.
+Starts automatically via systemd.
 The Prezio smartphone app connects via WiFi AP and controls recordings
 through the HTTP API.
 
 API Endpoints:
   GET  /health            - Health check + sensor status
+  GET  /auth/key          - Returns secret key for app authentication
   GET  /files             - List CSV files
   GET  /files/{name}      - Download CSV file
   DELETE /files/{name}    - Delete CSV file
   POST /recording/start   - Start recording
   POST /recording/stop    - Stop recording
   GET  /recording/status  - Current recording status
+  POST /reboot            - Reboot the Prezio Recorder
 """
 
 import csv
 import glob
+import hashlib
 import http.server
 import json
 import os
 import struct
+import subprocess
 import threading
 import time
 from dataclasses import dataclass, field
@@ -37,11 +42,27 @@ import serial.tools.list_ports
 # ============================================================
 
 DATA_DIR = Path(__file__).parent / "data"
+KEY_FILE = Path("/home/pi/prezio_key.txt")
 HTTP_PORT = 8080
 DEFAULT_INTERVAL_S = 10
 MAX_FILES = 10
 SENSOR_BAUD = 9600
 SENSOR_ADDRESS = 1
+
+
+def _load_or_create_key() -> str:
+    """Load the secret key from file, or create it if missing."""
+    if KEY_FILE.exists():
+        return KEY_FILE.read_text(encoding="utf-8").strip()
+    key = hashlib.sha256(b"Prezio-Recorder-2026").hexdigest()
+    try:
+        KEY_FILE.write_text(key + "\n", encoding="utf-8")
+    except PermissionError:
+        pass
+    return key
+
+
+SECRET_KEY = _load_or_create_key()
 
 # ============================================================
 # KELLER Protocol (identical to pc_recorder)
@@ -423,7 +444,7 @@ class PrezioRecorder:
     def get_health(self) -> dict:
         return {
             "status": "ok",
-            "server": "Prezio Pi Recorder",
+            "server": "Prezio Recorder",
             "sensor_connected": self.sensor_connected,
             "serial_number": self.serial_number,
             "sensor_port": self._sensor_port,
@@ -488,6 +509,10 @@ class PrezioHTTPHandler(http.server.BaseHTTPRequestHandler):
             self._send_json(rec.get_health())
             return
 
+        if path == "/auth/key":
+            self._send_json({"key": SECRET_KEY})
+            return
+
         if path == "/files":
             files = []
             if DATA_DIR.exists():
@@ -518,7 +543,7 @@ class PrezioHTTPHandler(http.server.BaseHTTPRequestHandler):
             return
 
         if path == "/":
-            self._send_text("Prezio Pi Recorder - HTTP API running")
+            self._send_text("Prezio Recorder - HTTP API running")
             return
 
         self._send_json({"error": "Not found"}, 404)
@@ -564,6 +589,12 @@ class PrezioHTTPHandler(http.server.BaseHTTPRequestHandler):
             self._send_json(result, status)
             return
 
+        if path == "/reboot":
+            self._send_json({"status": "rebooting"})
+            _log("Reboot requested via API")
+            threading.Timer(1.0, lambda: subprocess.run(["sudo", "reboot"])).start()
+            return
+
         self._send_json({"error": "Not found"}, 404)
 
     def do_DELETE(self):
@@ -600,7 +631,7 @@ def _log(msg: str) -> None:
 def main():
     global _recorder
 
-    _log("Prezio Pi Recorder starting...")
+    _log("Prezio Recorder starting...")
     _log(f"Data directory: {DATA_DIR}")
     _log(f"HTTP port: {HTTP_PORT}")
 

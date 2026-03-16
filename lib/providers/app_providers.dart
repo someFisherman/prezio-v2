@@ -30,6 +30,14 @@ final weatherServiceProvider = Provider<WeatherService>((ref) {
   return WeatherService();
 });
 
+final nominatimServiceProvider = Provider<NominatimService>((ref) {
+  return NominatimService();
+});
+
+final firebaseUploadServiceProvider = Provider<FirebaseUploadService>((ref) {
+  return FirebaseUploadService();
+});
+
 final measurementsProvider = StateNotifierProvider<MeasurementsNotifier, List<Measurement>>((ref) {
   final service = ref.watch(measurementServiceProvider);
   return MeasurementsNotifier(service);

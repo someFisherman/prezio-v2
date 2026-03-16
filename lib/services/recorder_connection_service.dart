@@ -17,8 +17,8 @@ class FileInfo {
     return FileInfo(
       filename: json['filename'] ?? json['name'] ?? '',
       size: json['size'] ?? 0,
-      modified: json['modified'] != null 
-          ? DateTime.tryParse(json['modified']) 
+      modified: json['modified'] != null
+          ? DateTime.tryParse(json['modified'])
           : null,
     );
   }
@@ -101,15 +101,15 @@ class HealthStatus {
   }
 }
 
-class PiConnectionService {
+class RecorderConnectionService {
   String _address;
   int _port;
 
-  PiConnectionService({
+  RecorderConnectionService({
     String? address,
     int? port,
-  })  : _address = address ?? AppConstants.defaultPiAddress,
-        _port = port ?? AppConstants.defaultPiPort;
+  })  : _address = address ?? AppConstants.defaultRecorderAddress,
+        _port = port ?? AppConstants.defaultRecorderPort;
 
   String get baseUrl => 'http://$_address:$_port';
 
@@ -140,6 +140,32 @@ class PiConnectionService {
       return null;
     } catch (e) {
       return null;
+    }
+  }
+
+  Future<String?> fetchAuthKey() async {
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/auth/key'))
+          .timeout(AppConstants.connectionTimeout);
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return data['key'] as String?;
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  Future<bool> rebootRecorder() async {
+    try {
+      final response = await http
+          .post(Uri.parse('$baseUrl/reboot'))
+          .timeout(AppConstants.connectionTimeout);
+      return response.statusCode == 200;
+    } catch (e) {
+      return false;
     }
   }
 

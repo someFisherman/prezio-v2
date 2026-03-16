@@ -31,8 +31,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     setState(() {
       _nameController.text = storage.getTechnicianName();
-      _addressController.text = storage.getPiAddress();
-      _portController.text = storage.getPiPort().toString();
+      _addressController.text = storage.getRecorderAddress();
+      _portController.text = storage.getRecorderPort().toString();
       _isLoading = false;
     });
   }
@@ -80,7 +80,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                   const SizedBox(height: 16),
                   _buildSectionCard(
-                    'Raspberry Pi Verbindung',
+                    'Prezio Recorder Verbindung',
                     Icons.wifi,
                     [
                       TextField(
@@ -125,6 +125,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     [
                       _buildInfoRow('App-Version', AppConstants.appVersion),
                       _buildInfoRow('App-Name', AppConstants.appName),
+                      const SizedBox(height: 16),
+                      Center(
+                        child: Opacity(
+                          opacity: 0.4,
+                          child: Image.asset(
+                            'assets/images/climartis.png',
+                            width: 48,
+                            height: 48,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ],
@@ -176,14 +187,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final storage = ref.read(storageServiceProvider);
 
     await storage.setTechnicianName(_nameController.text);
-    await storage.setPiAddress(_addressController.text);
-    await storage.setPiPort(
-        int.tryParse(_portController.text) ?? AppConstants.defaultPiPort);
+    await storage.setRecorderAddress(_addressController.text);
+    await storage.setRecorderPort(
+        int.tryParse(_portController.text) ?? AppConstants.defaultRecorderPort);
 
     final measurementService = ref.read(measurementServiceProvider);
-    measurementService.updatePiConnection(
+    measurementService.updateRecorderConnection(
       _addressController.text,
-      int.tryParse(_portController.text) ?? AppConstants.defaultPiPort,
+      int.tryParse(_portController.text) ?? AppConstants.defaultRecorderPort,
     );
 
     if (mounted) {

@@ -24,18 +24,30 @@ class _InternetCheckScreenState extends ConsumerState<InternetCheckScreen> {
   bool _checking = true;
   bool _connected = false;
   bool _fetchingWeather = false;
+  bool _rebootSent = false;
   Timer? _retryTimer;
 
   @override
   void initState() {
     super.initState();
-    _checkConnection();
+    _sendRebootAndCheck();
   }
 
   @override
   void dispose() {
     _retryTimer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _sendRebootAndCheck() async {
+    if (!_rebootSent) {
+      try {
+        final service = ref.read(measurementServiceProvider);
+        await service.recorderConnection.rebootRecorder();
+      } catch (_) {}
+      _rebootSent = true;
+    }
+    _checkConnection();
   }
 
   Future<void> _checkConnection() async {
@@ -69,6 +81,9 @@ class _InternetCheckScreenState extends ConsumerState<InternetCheckScreen> {
   Future<void> _onConnected() async {
     setState(() => _fetchingWeather = true);
 
+    // Upload raw CSV to Firebase immediately (best-effort, don't block)
+    _uploadRawCsv();
+
     WeatherData? weatherData;
     try {
       final weatherService = ref.read(weatherServiceProvider);
@@ -91,6 +106,22 @@ class _InternetCheckScreenState extends ConsumerState<InternetCheckScreen> {
     }
   }
 
+  Future<void> _uploadRawCsv() async {
+    try {
+      final firebaseService = ref.read(firebaseUploadServiceProvider);
+      if (!firebaseService.isConfigured) return;
+
+      final measurementService = ref.read(measurementServiceProvider);
+      final csvContent = measurementService.exportToCsv(widget.measurement);
+      final name = widget.measurement.metadata?.name ?? widget.measurement.filename;
+
+      await firebaseService.uploadRawMeasurement(
+        csvContent: csvContent,
+        measurementName: name,
+      );
+    } catch (_) {}
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -109,7 +140,7 @@ class _InternetCheckScreenState extends ConsumerState<InternetCheckScreen> {
                 const CircularProgressIndicator(),
                 const SizedBox(height: 16),
                 const Text(
-                  'Wetterdaten werden abgerufen...',
+                  'Standort & Wetterdaten werden abgerufen...',
                   style: TextStyle(fontSize: 16),
                 ),
               ] else if (_checking) ...[
@@ -130,8 +161,8 @@ class _InternetCheckScreenState extends ConsumerState<InternetCheckScreen> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Bitte das Pi-WiFi verlassen und mit dem '
-                  'normalen WiFi oder Mobilfunk verbinden.',
+                  'Der Prezio Recorder wurde neu gestartet.\n'
+                  'Bitte mit normalem WiFi oder Mobilfunk verbinden.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     color: Colors.grey[700],
@@ -150,9 +181,7 @@ class _InternetCheckScreenState extends ConsumerState<InternetCheckScreen> {
                     children: [
                       _buildStep('1', 'Einstellungen > WLAN oeffnen'),
                       const SizedBox(height: 8),
-                      _buildStep('2', '"Prezio-Recorder" trennen'),
-                      const SizedBox(height: 8),
-                      _buildStep('3', 'Normales WiFi verbinden oder Mobilfunk nutzen'),
+                      _buildStep('2', 'Normales WiFi verbinden oder Mobilfunk nutzen'),
                     ],
                   ),
                 ),

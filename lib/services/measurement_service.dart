@@ -1,10 +1,10 @@
 import '../models/models.dart';
 import 'csv_parser_service.dart';
-import 'pi_connection_service.dart';
+import 'recorder_connection_service.dart';
 
 class MeasurementService {
   final CsvParserService _csvParser = CsvParserService();
-  final PiConnectionService _piConnection = PiConnectionService();
+  final RecorderConnectionService _recorderConnection = RecorderConnectionService();
   
   final List<Measurement> _measurements = [];
 
@@ -19,22 +19,40 @@ class MeasurementService {
   List<Measurement> get pendingMeasurements => 
       _measurements.where((m) => m.validationStatus == ValidationStatus.pending).toList();
 
-  PiConnectionService get piConnection => _piConnection;
+  RecorderConnectionService get recorderConnection => _recorderConnection;
 
+  @Deprecated('Use recorderConnection instead')
+  RecorderConnectionService get piConnection => _recorderConnection;
+
+  void updateRecorderConnection(String address, int port) {
+    _recorderConnection.updateConnection(address, port);
+  }
+
+  @Deprecated('Use updateRecorderConnection instead')
   void updatePiConnection(String address, int port) {
-    _piConnection.updateConnection(address, port);
+    updateRecorderConnection(address, port);
   }
 
+  Future<bool> checkRecorderConnection() {
+    return _recorderConnection.checkConnection();
+  }
+
+  @Deprecated('Use checkRecorderConnection instead')
   Future<bool> checkPiConnection() {
-    return _piConnection.checkConnection();
+    return checkRecorderConnection();
   }
 
+  Future<List<FileInfo>> listRecorderFiles() {
+    return _recorderConnection.listFiles();
+  }
+
+  @Deprecated('Use listRecorderFiles instead')
   Future<List<FileInfo>> listPiFiles() {
-    return _piConnection.listFiles();
+    return listRecorderFiles();
   }
 
-  Future<Measurement?> loadSingleFromPi(FileInfo file) async {
-    final content = await _piConnection.downloadFile(file.filename);
+  Future<Measurement?> loadSingleFromRecorder(FileInfo file) async {
+    final content = await _recorderConnection.downloadFile(file.filename);
     if (content == null) return null;
 
     final measurement = _csvParser.parseFromString(content, filename: file.filename);
@@ -44,12 +62,17 @@ class MeasurementService {
     return measurement;
   }
 
-  Future<int> loadSelectedFromPi(List<FileInfo> files) async {
+  @Deprecated('Use loadSingleFromRecorder instead')
+  Future<Measurement?> loadSingleFromPi(FileInfo file) {
+    return loadSingleFromRecorder(file);
+  }
+
+  Future<int> loadSelectedFromRecorder(List<FileInfo> files) async {
     int loadedCount = 0;
 
     for (final file in files) {
       if (!file.filename.endsWith('.csv')) continue;
-      final content = await _piConnection.downloadFile(file.filename);
+      final content = await _recorderConnection.downloadFile(file.filename);
       if (content != null) {
         final measurement = _csvParser.parseFromString(content, filename: file.filename);
         if (measurement != null) {

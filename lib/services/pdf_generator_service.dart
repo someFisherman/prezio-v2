@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
@@ -7,8 +8,22 @@ import '../models/models.dart';
 import '../utils/formatters.dart';
 
 class PdfGeneratorService {
+  pw.MemoryImage? _lehmannLogo;
+
+  Future<pw.MemoryImage?> _loadLehmannLogo() async {
+    if (_lehmannLogo != null) return _lehmannLogo;
+    try {
+      final data = await rootBundle.load('assets/images/lehmann2000.png');
+      _lehmannLogo = pw.MemoryImage(data.buffer.asUint8List());
+      return _lehmannLogo;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<String> generateProtocolPdf(ProtocolData data) async {
     final pdf = pw.Document();
+    final logo = await _loadLehmannLogo();
 
     pdf.addPage(
       pw.Page(
@@ -17,7 +32,7 @@ class PdfGeneratorService {
         build: (context) => pw.Column(
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
-            _buildHeader(),
+            _buildHeader(logo),
             pw.SizedBox(height: 30),
             _buildLocationDate(data),
             pw.SizedBox(height: 30),
@@ -53,7 +68,17 @@ class PdfGeneratorService {
     return file.path;
   }
 
-  pw.Widget _buildHeader() {
+  pw.Widget _buildHeader(pw.MemoryImage? logo) {
+    if (logo != null) {
+      return pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Image(logo, width: 200, height: 60, fit: pw.BoxFit.contain),
+        ],
+      );
+    }
+
     return pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
       crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -85,8 +110,11 @@ class PdfGeneratorService {
 
   pw.Widget _buildLocationDate(ProtocolData data) {
     final date = Formatters.formatDate(data.measurement.startTime);
+    final locationText = data.location != null && data.location!.isNotEmpty
+        ? data.location!.split(',').first.trim()
+        : 'Zofingen';
     return pw.Text(
-      'Zofingen / $date',
+      '$locationText / $date',
       style: const pw.TextStyle(fontSize: 11, color: PdfColors.blue800),
     );
   }
@@ -110,6 +138,10 @@ class PdfGeneratorService {
           'Verfasser: ${data.author.isNotEmpty ? data.author : data.technicianName}',
           style: const pw.TextStyle(fontSize: 11),
         ),
+        if (data.location != null && data.location!.isNotEmpty) ...[
+          pw.SizedBox(height: 8),
+          _buildLabelValue('Standort:', data.location!),
+        ],
       ],
     );
   }

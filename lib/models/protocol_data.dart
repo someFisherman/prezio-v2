@@ -50,6 +50,10 @@ class ProtocolData {
   final String? notes;
   final String? validationReason;
 
+  final String? location;
+  final double? latitude;
+  final double? longitude;
+
   const ProtocolData({
     required this.measurement,
     this.objectName = '',
@@ -67,6 +71,9 @@ class ProtocolData {
     this.chartImage,
     this.notes,
     this.validationReason,
+    this.location,
+    this.latitude,
+    this.longitude,
   });
 
   ProtocolData copyWith({
@@ -86,6 +93,9 @@ class ProtocolData {
     Uint8List? chartImage,
     String? notes,
     String? validationReason,
+    String? location,
+    double? latitude,
+    double? longitude,
   }) {
     return ProtocolData(
       measurement: measurement ?? this.measurement,
@@ -104,6 +114,9 @@ class ProtocolData {
       chartImage: chartImage ?? this.chartImage,
       notes: notes ?? this.notes,
       validationReason: validationReason ?? this.validationReason,
+      location: location ?? this.location,
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
     );
   }
 }

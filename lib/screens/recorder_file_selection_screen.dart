@@ -5,14 +5,16 @@ import '../services/services.dart';
 import '../utils/formatters.dart';
 import 'internet_check_screen.dart';
 
-class PiFileSelectionScreen extends ConsumerStatefulWidget {
-  const PiFileSelectionScreen({super.key});
+class RecorderFileSelectionScreen extends ConsumerStatefulWidget {
+  const RecorderFileSelectionScreen({super.key});
 
   @override
-  ConsumerState<PiFileSelectionScreen> createState() => _PiFileSelectionScreenState();
+  ConsumerState<RecorderFileSelectionScreen> createState() =>
+      _RecorderFileSelectionScreenState();
 }
 
-class _PiFileSelectionScreenState extends ConsumerState<PiFileSelectionScreen> {
+class _RecorderFileSelectionScreenState
+    extends ConsumerState<RecorderFileSelectionScreen> {
   bool _isConnecting = true;
   bool _isLoading = false;
   String? _error;
@@ -33,21 +35,21 @@ class _PiFileSelectionScreenState extends ConsumerState<PiFileSelectionScreen> {
 
     try {
       final service = ref.read(measurementServiceProvider);
-      final files = await service.listPiFiles();
+      final files = await service.listRecorderFiles();
 
       if (files.isEmpty) {
-        final connected = await service.checkPiConnection();
+        final connected = await service.checkRecorderConnection();
         if (!connected) {
           setState(() {
-            _error = 'Keine Verbindung zum Raspberry Pi.\n\n'
+            _error = 'Keine Verbindung zum Prezio Recorder.\n\n'
                 'Bitte pruefen:\n'
-                '- Ist der Pi eingeschaltet?\n'
-                '- Ist das Handy mit dem Pi-WiFi verbunden?\n'
+                '- Ist der Recorder eingeschaltet?\n'
+                '- Ist das Handy mit dem Recorder-WiFi verbunden?\n'
                 '- Stimmt die IP-Adresse in den Einstellungen?';
           });
         } else {
           setState(() {
-            _error = 'Verbindung OK, aber keine Messungen auf dem Pi gefunden.';
+            _error = 'Verbindung OK, aber keine Messungen auf dem Recorder gefunden.';
           });
         }
       } else {
@@ -67,10 +69,8 @@ class _PiFileSelectionScreenState extends ConsumerState<PiFileSelectionScreen> {
   }
 
   String _extractName(String filename) {
-    // Format: messung_2026-03-15_15-00-53_Heizung_OG.csv
     final withoutExt = filename.replaceAll('.csv', '');
     final parts = withoutExt.split('_');
-    // Skip: messung, date (3 parts), time (3 parts) = first 7 parts
     if (parts.length > 4) {
       return parts.sublist(4).join(' ');
     }
@@ -85,7 +85,7 @@ class _PiFileSelectionScreenState extends ConsumerState<PiFileSelectionScreen> {
 
     try {
       final service = ref.read(measurementServiceProvider);
-      final measurement = await service.loadSingleFromPi(file);
+      final measurement = await service.loadSingleFromRecorder(file);
 
       if (measurement == null) {
         if (mounted) {
@@ -129,7 +129,7 @@ class _PiFileSelectionScreenState extends ConsumerState<PiFileSelectionScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Messungen vom Pi'),
+        title: const Text('Messungen vom Recorder'),
         actions: [
           IconButton(
             onPressed: _isLoading ? null : _connectAndLoadFiles,
@@ -150,7 +150,7 @@ class _PiFileSelectionScreenState extends ConsumerState<PiFileSelectionScreen> {
           children: [
             CircularProgressIndicator(),
             SizedBox(height: 16),
-            Text('Verbinde mit Raspberry Pi...'),
+            Text('Verbinde mit Prezio Recorder...'),
           ],
         ),
       );

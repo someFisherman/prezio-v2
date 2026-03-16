@@ -16,21 +16,33 @@ class StorageService {
     await _prefs?.setString(StorageKeys.technicianName, name);
   }
 
-  String getPiAddress() {
-    return _prefs?.getString(StorageKeys.piAddress) ?? AppConstants.defaultPiAddress;
+  String getRecorderAddress() {
+    return _prefs?.getString(StorageKeys.recorderAddress) ?? AppConstants.defaultRecorderAddress;
   }
 
-  Future<void> setPiAddress(String address) async {
-    await _prefs?.setString(StorageKeys.piAddress, address);
+  @Deprecated('Use getRecorderAddress')
+  String getPiAddress() => getRecorderAddress();
+
+  Future<void> setRecorderAddress(String address) async {
+    await _prefs?.setString(StorageKeys.recorderAddress, address);
   }
 
-  int getPiPort() {
-    return _prefs?.getInt(StorageKeys.piPort) ?? AppConstants.defaultPiPort;
+  @Deprecated('Use setRecorderAddress')
+  Future<void> setPiAddress(String address) => setRecorderAddress(address);
+
+  int getRecorderPort() {
+    return _prefs?.getInt(StorageKeys.recorderPort) ?? AppConstants.defaultRecorderPort;
   }
 
-  Future<void> setPiPort(int port) async {
-    await _prefs?.setInt(StorageKeys.piPort, port);
+  @Deprecated('Use getRecorderPort')
+  int getPiPort() => getRecorderPort();
+
+  Future<void> setRecorderPort(int port) async {
+    await _prefs?.setInt(StorageKeys.recorderPort, port);
   }
+
+  @Deprecated('Use setRecorderPort')
+  Future<void> setPiPort(int port) => setRecorderPort(port);
 
   String getLastObjectName() {
     return _prefs?.getString(StorageKeys.lastObjectName) ?? '';
@@ -65,5 +77,4 @@ class StorageService {
       await _prefs?.remove(StorageKeys.outputFolderName);
     }
   }
-
 }

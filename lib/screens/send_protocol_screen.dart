@@ -20,6 +20,8 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
   bool _isProcessing = true;
   String? _error;
   String? _savedPath;
+  bool _cloudUploaded = false;
+  String? _cloudError;
 
   @override
   void initState() {
@@ -47,7 +49,24 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
         protocolData: widget.protocolData,
       );
 
+      final folderName = localResult.folderPath.split('/').last.split('\\').last;
       setState(() => _savedPath = localResult.folderPath);
+
+      final firebaseService = ref.read(firebaseUploadServiceProvider);
+      if (firebaseService.isConfigured) {
+        final uploadResult = await firebaseService.uploadProtocol(
+          pdfPath: pdfPath,
+          csvContent: csvContent,
+          protocolData: widget.protocolData,
+          folderName: folderName,
+        );
+        if (mounted) {
+          setState(() {
+            _cloudUploaded = uploadResult.success;
+            _cloudError = uploadResult.error;
+          });
+        }
+      }
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
@@ -131,6 +150,9 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
             _buildSummaryRow('Pruefdruck',
                 Formatters.formatPressureWithUnit(widget.protocolData.testPressure)),
             _buildSummaryRow('Dauer', widget.protocolData.testDuration),
+            if (widget.protocolData.location != null &&
+                widget.protocolData.location!.isNotEmpty)
+              _buildSummaryRow('Standort', widget.protocolData.location!),
           ],
         ),
       ),
@@ -145,7 +167,15 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: TextStyle(color: Colors.grey[600])),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.w500)),
+          Flexible(
+            child: Text(
+              value,
+              style: const TextStyle(fontWeight: FontWeight.w500),
+              textAlign: TextAlign.end,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
       ),
     );
@@ -189,16 +219,41 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
                 ],
               )
             else ...[
-              Row(
+              const Row(
                 children: [
-                  const Icon(Icons.check_circle, color: Colors.green, size: 20),
-                  const SizedBox(width: 8),
-                  const Expanded(
+                  Icon(Icons.check_circle, color: Colors.green, size: 20),
+                  SizedBox(width: 8),
+                  Expanded(
                     child: Text(
                       'Lokal gespeichert',
                       style: TextStyle(
                         color: Colors.green,
                         fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(
+                    _cloudUploaded ? Icons.cloud_done : Icons.cloud_off,
+                    color: _cloudUploaded
+                        ? Colors.green
+                        : (_cloudError != null ? Colors.orange : Colors.grey),
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _cloudUploaded
+                          ? 'Firebase hochgeladen'
+                          : (_cloudError ?? 'Firebase nicht konfiguriert'),
+                      style: TextStyle(
+                        color: _cloudUploaded ? Colors.green : Colors.grey[600],
+                        fontWeight: FontWeight.w500,
+                        fontSize: 13,
                       ),
                     ),
                   ),

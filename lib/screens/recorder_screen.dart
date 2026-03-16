@@ -3,15 +3,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/providers.dart';
 import '../services/services.dart';
+import 'internet_check_screen.dart';
+import 'recorder_file_selection_screen.dart';
+import 'settings_screen.dart';
 
-class PiRecordingScreen extends ConsumerStatefulWidget {
-  const PiRecordingScreen({super.key});
+class RecorderScreen extends ConsumerStatefulWidget {
+  const RecorderScreen({super.key});
 
   @override
-  ConsumerState<PiRecordingScreen> createState() => _PiRecordingScreenState();
+  ConsumerState<RecorderScreen> createState() => _RecorderScreenState();
 }
 
-class _PiRecordingScreenState extends ConsumerState<PiRecordingScreen> {
+class _RecorderScreenState extends ConsumerState<RecorderScreen> {
   final _nameController = TextEditingController(text: 'Messung');
   final _intervalController = TextEditingController(text: '10');
   int _selectedPN = 25;
@@ -47,14 +50,14 @@ class _PiRecordingScreenState extends ConsumerState<PiRecordingScreen> {
 
     try {
       final service = ref.read(measurementServiceProvider);
-      final health = await service.piConnection.getHealth();
+      final health = await service.recorderConnection.getHealth();
 
       if (health == null) {
         setState(() {
-          _error = 'Keine Verbindung zum Raspberry Pi.\n\n'
+          _error = 'Keine Verbindung zum Prezio Recorder.\n\n'
               'Bitte pruefen:\n'
-              '- Ist der Pi eingeschaltet?\n'
-              '- Ist das Handy mit dem Pi-WiFi verbunden?\n'
+              '- Ist der Recorder eingeschaltet?\n'
+              '- Ist das Handy mit dem Recorder-WiFi verbunden?\n'
               '- Stimmt die IP-Adresse in den Einstellungen?';
         });
       } else {
@@ -78,7 +81,7 @@ class _PiRecordingScreenState extends ConsumerState<PiRecordingScreen> {
 
   Future<void> _fetchRecordingStatus() async {
     final service = ref.read(measurementServiceProvider);
-    final status = await service.piConnection.getRecordingStatus();
+    final status = await service.recorderConnection.getRecordingStatus();
     if (mounted && status != null) {
       setState(() => _recordingStatus = status);
     }
@@ -105,7 +108,7 @@ class _PiRecordingScreenState extends ConsumerState<PiRecordingScreen> {
 
     try {
       final service = ref.read(measurementServiceProvider);
-      final result = await service.piConnection.startRecording(
+      final result = await service.recorderConnection.startRecording(
         name: name,
         pn: _selectedPN,
         medium: _selectedMedium,
@@ -145,7 +148,7 @@ class _PiRecordingScreenState extends ConsumerState<PiRecordingScreen> {
 
     try {
       final service = ref.read(measurementServiceProvider);
-      final result = await service.piConnection.stopRecording();
+      final result = await service.recorderConnection.stopRecording();
 
       if (result.containsKey('error')) {
         if (mounted) {
@@ -157,13 +160,13 @@ class _PiRecordingScreenState extends ConsumerState<PiRecordingScreen> {
           );
         }
       } else {
-        await _fetchRecordingStatus();
-        if (mounted) {
-          final samples = result['samples'] ?? 0;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Aufzeichnung gestoppt ($samples Messpunkte)')),
-          );
+        final filename = result['filename'] as String?;
+        if (filename != null && mounted) {
+          _pollTimer?.cancel();
+          _loadAndContinue(filename);
+          return;
         }
+        await _fetchRecordingStatus();
       }
     } catch (e) {
       if (mounted) {
@@ -176,11 +179,59 @@ class _PiRecordingScreenState extends ConsumerState<PiRecordingScreen> {
     }
   }
 
+  Future<void> _loadAndContinue(String filename) async {
+    final service = ref.read(measurementServiceProvider);
+    final file = FileInfo(filename: filename);
+    final measurement = await service.loadSingleFromRecorder(file);
+
+    if (measurement != null && mounted) {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => InternetCheckScreen(measurement: measurement),
+        ),
+      );
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Messung konnte nicht geladen werden'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      _checkConnection();
+    }
+  }
+
+  void _goToFileSelection() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const RecorderFileSelectionScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Aufzeichnung'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.folder_open),
+            tooltip: 'Gespeicherte Messungen',
+            onPressed: _goToFileSelection,
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SettingsScreen()),
+            ),
+          ),
+        ],
       ),
       body: _buildBody(),
     );
@@ -194,7 +245,7 @@ class _PiRecordingScreenState extends ConsumerState<PiRecordingScreen> {
           children: [
             CircularProgressIndicator(),
             SizedBox(height: 16),
-            Text('Verbinde mit Raspberry Pi...'),
+            Text('Verbinde mit Prezio Recorder...'),
           ],
         ),
       );
@@ -239,6 +290,18 @@ class _PiRecordingScreenState extends ConsumerState<PiRecordingScreen> {
             _buildActiveRecordingCard()
           else
             _buildNewRecordingCard(),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _goToFileSelection,
+              icon: const Icon(Icons.folder_open),
+              label: const Text('Gespeicherte Aufzeichnungen'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -262,11 +325,11 @@ class _PiRecordingScreenState extends ConsumerState<PiRecordingScreen> {
                   ?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
-            Row(
+            const Row(
               children: [
                 Icon(Icons.wifi, color: Colors.green, size: 20),
-                const SizedBox(width: 8),
-                const Text('Raspberry Pi verbunden'),
+                SizedBox(width: 8),
+                Text('Prezio Recorder verbunden'),
               ],
             ),
             const SizedBox(height: 8),
@@ -353,7 +416,7 @@ class _PiRecordingScreenState extends ConsumerState<PiRecordingScreen> {
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.stop),
-                label: Text(_isStopping ? 'Wird gestoppt...' : 'Aufzeichnung stoppen'),
+                label: Text(_isStopping ? 'Wird gestoppt...' : 'Stoppen & weiter zum Protokoll'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.red,
                   foregroundColor: Colors.white,

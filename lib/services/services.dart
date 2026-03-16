@@ -1,5 +1,5 @@
 export 'csv_parser_service.dart';
-export 'pi_connection_service.dart';
+export 'recorder_connection_service.dart';
 export 'measurement_service.dart';
 export 'storage_service.dart';
 export 'email_service.dart';
@@ -7,3 +7,5 @@ export 'pdf_generator_service.dart';
 export 'validation_service.dart';
 export 'protocol_storage_service.dart';
 export 'weather_service.dart';
+export 'nominatim_service.dart';
+export 'firebase_upload_service.dart';

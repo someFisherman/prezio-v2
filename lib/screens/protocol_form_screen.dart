@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import '../models/models.dart';
 import '../providers/providers.dart';
 import '../services/services.dart';
@@ -22,16 +24,21 @@ class ProtocolFormScreen extends ConsumerStatefulWidget {
 
 class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
   final _formKey = GlobalKey<FormState>();
-  
+
   late TextEditingController _objectController;
   late TextEditingController _projectController;
   late TextEditingController _authorController;
   late TextEditingController _technicianController;
   late TextEditingController _notesController;
-  
+  late TextEditingController _locationController;
+
   int _selectedPN = 25;
   TestMedium _selectedMedium = TestMedium.air;
   ValidationResult? _validationResult;
+  List<NominatimPlace> _locationSuggestions = [];
+  Timer? _searchDebounce;
+  double? _latitude;
+  double? _longitude;
 
   bool get _hasLockedParams => widget.measurement.hasRecordingMetadata;
 
@@ -43,21 +50,80 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
     _authorController = TextEditingController();
     _technicianController = TextEditingController();
     _notesController = TextEditingController();
+    _locationController = TextEditingController();
 
     final meta = widget.measurement.metadata;
     if (meta != null && meta.hasRecordingParams) {
       _selectedPN = meta.pn!;
       _selectedMedium = meta.medium == 'water' ? TestMedium.water : TestMedium.air;
     }
-    
+
     _loadStoredValues();
     _runValidation();
+    _fetchCurrentLocation();
+  }
+
+  Future<void> _fetchCurrentLocation() async {
+    try {
+      final permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        final requested = await Geolocator.requestPermission();
+        if (requested == LocationPermission.denied ||
+            requested == LocationPermission.deniedForever) {
+          return;
+        }
+      }
+      if (permission == LocationPermission.deniedForever) return;
+
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 10),
+        ),
+      );
+
+      _latitude = position.latitude;
+      _longitude = position.longitude;
+
+      final nominatim = ref.read(nominatimServiceProvider);
+      final place = await nominatim.reverseGeocode(position.latitude, position.longitude);
+      if (place != null && mounted) {
+        setState(() {
+          _locationController.text = place.displayName;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _searchLocation(String query) async {
+    _searchDebounce?.cancel();
+    if (query.trim().length < 3) {
+      setState(() => _locationSuggestions = []);
+      return;
+    }
+
+    _searchDebounce = Timer(const Duration(milliseconds: 600), () async {
+      final nominatim = ref.read(nominatimServiceProvider);
+      final results = await nominatim.search(query);
+      if (mounted) {
+        setState(() => _locationSuggestions = results);
+      }
+    });
+  }
+
+  void _selectLocation(NominatimPlace place) {
+    setState(() {
+      _locationController.text = place.displayName;
+      _latitude = place.lat;
+      _longitude = place.lon;
+      _locationSuggestions = [];
+    });
   }
 
   Future<void> _loadStoredValues() async {
     final storage = ref.read(storageServiceProvider);
     await storage.init();
-    
+
     setState(() {
       _technicianController.text = storage.getTechnicianName();
       _objectController.text = storage.getLastObjectName();
@@ -86,6 +152,8 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
     _authorController.dispose();
     _technicianController.dispose();
     _notesController.dispose();
+    _locationController.dispose();
+    _searchDebounce?.cancel();
     super.dispose();
   }
 
@@ -122,6 +190,8 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
                   ),
                 ],
               ),
+              const SizedBox(height: 16),
+              _buildLocationCard(),
               const SizedBox(height: 16),
               _buildSectionCard(
                 'Druckpruefung',
@@ -185,6 +255,84 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
     );
   }
 
+  Widget _buildLocationCard() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.location_on, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(width: 8),
+                Text(
+                  'Standort der Messung',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TextFormField(
+              controller: _locationController,
+              decoration: InputDecoration(
+                labelText: 'Standort',
+                hintText: 'Wird automatisch ermittelt...',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _locationController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _locationController.clear();
+                          setState(() => _locationSuggestions = []);
+                        },
+                      )
+                    : null,
+              ),
+              onChanged: _searchLocation,
+            ),
+            if (_locationSuggestions.isNotEmpty) ...[
+              const SizedBox(height: 4),
+              Container(
+                constraints: const BoxConstraints(maxHeight: 200),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.grey.shade300),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: _locationSuggestions.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final place = _locationSuggestions[index];
+                    return ListTile(
+                      dense: true,
+                      leading: const Icon(Icons.place, size: 18),
+                      title: Text(
+                        place.displayName,
+                        style: const TextStyle(fontSize: 13),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      onTap: () => _selectLocation(place),
+                    );
+                  },
+                ),
+              ),
+            ],
+            if (_latitude != null && _longitude != null) ...[
+              const SizedBox(height: 8),
+              Text(
+                'GPS: ${_latitude!.toStringAsFixed(5)}, ${_longitude!.toStringAsFixed(5)}',
+                style: TextStyle(color: Colors.grey[500], fontSize: 12),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildSectionCard(String title, List<Widget> children) {
     return Card(
       child: Padding(
@@ -193,7 +341,7 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(title,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
             const SizedBox(height: 16),
             ...children,
           ],
@@ -448,6 +596,9 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
       technicianName: _technicianController.text,
       notes: _notesController.text.isEmpty ? null : _notesController.text,
       validationReason: _validationResult?.reason,
+      location: _locationController.text.isEmpty ? null : _locationController.text,
+      latitude: _latitude,
+      longitude: _longitude,
     );
 
     ref.read(protocolDataProvider.notifier).state = protocolData;
