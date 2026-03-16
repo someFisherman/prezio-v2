@@ -1,6 +1,6 @@
 # Prezio v2 - Vollstaendige Dokumentation
 
-**Version:** 2.3.0  
+**Version:** 2.4.0  
 **Stand:** Maerz 2026  
 **Entwickelt fuer:** Soleco AG / Lehmann 2000, Zofingen  
 **Plattformen:** iOS, Android (Flutter)  
@@ -121,7 +121,7 @@ ConnectScreen (Kolibri-Logo, Recorder-Verbindung + Key-Auth)
 | ConnectScreen | `connect_screen.dart` | Einstieg: Kolibri-Logo, pollt Recorder, holt Key |
 | RecorderScreen | `recorder_screen.dart` | Aufzeichnung starten/stoppen, "Aufzeichnungen"-Button |
 | RecorderFileSelectionScreen | `recorder_file_selection_screen.dart` | Einzelauswahl einer Messung vom Recorder |
-| InternetCheckScreen | `internet_check_screen.dart` | Reboot-Befehl an Recorder, Internet pruefen, fruehen CSV-Upload |
+| InternetCheckScreen | `internet_check_screen.dart` | WLAN-Aus-Befehl an Recorder, Internet pruefen, fruehen CSV-Upload |
 | ProtocolFormScreen | `protocol_form_screen.dart` | Formular mit Standort (Nominatim), Wetter, Validierung, Druckkurve |
 | SignatureScreen | `signature_screen.dart` | Unterschrift + Chart-Vorschau |
 | SendProtocolScreen | `send_protocol_screen.dart` | Lokal speichern + Supabase Upload |
@@ -143,14 +143,14 @@ Der Key wird bei jedem App-Start neu geholt. Ohne Recorder kein Zugang.
 
 | Service | Datei | Aufgabe |
 |---|---|---|
-| RecorderConnectionService | `recorder_connection_service.dart` | HTTP-Client fuer Recorder-API inkl. Key + Reboot |
+| RecorderConnectionService | `recorder_connection_service.dart` | HTTP-Client fuer Recorder-API inkl. Key + WLAN-Aus |
 | MeasurementService | `measurement_service.dart` | Messungen laden, verwalten, exportieren |
 | CsvParserService | `csv_parser_service.dart` | CSV parsen (inkl. Metadaten-Header) |
 | ValidationService | `validation_service.dart` | Druckpruefung validieren |
 | WeatherService | `weather_service.dart` | Wetterdaten von Open-Meteo holen |
 | NominatimService | `nominatim_service.dart` | Reverse Geocoding + Ortssuche (OpenStreetMap) |
 | SupabaseUploadService | `supabase_upload_service.dart` | REST-Upload zu Supabase (Tabellen + Storage) |
-| PdfGeneratorService | `pdf_generator_service.dart` | A4-PDF mit Lehmann-2000-Logo generieren |
+| PdfGeneratorService | `pdf_generator_service.dart` | A4-PDF: Seite 1 Protokoll + Unterschriften, Seite 2 nur Druckkurve |
 | ProtocolStorageService | `protocol_storage_service.dart` | Lokale Ordnerstruktur + Metadaten |
 | StorageService | `storage_service.dart` | SharedPreferences (Einstellungen) |
 
@@ -161,8 +161,9 @@ Der Key wird bei jedem App-Start neu geholt. Ohne Recorder kein Zugang.
 | Sample | `sample.dart` | index, timestamp, timestampUtc, pressureBar, temperatureC, pressureRounded, temperatureRounded |
 | Measurement | `measurement.dart` | id, filename, startTime, endTime, duration, samples[], validationStatus, metadata |
 | CsvMetadata | `measurement.dart` | name, pn, medium, intervalS |
-| ProtocolData | `protocol_data.dart` | measurement, objectName, projectName, author, nominalPressure, testMedium, testPressure, result, passed, technicianName, signature, chartImage, notes, **location, latitude, longitude** |
+| ProtocolData | `protocol_data.dart` | measurement, objectName, projectName, author, nominalPressure, testMedium, testPressure, result, passed, technicianName, signature, chartImage, notes, location, latitude, longitude, **testProfileId, testProfileName, detectedHoldDurationHours, pressureDropBar, failureReasons** |
 | TestMedium | `protocol_data.dart` | air (Faktor 1.1), water (Faktor 1.5) |
+| TestProfile | `test_profile.dart` | id, name, medium, holdDurationHours, maxPressureDropBar, etc. |
 | WeatherData | `weather_data.dart` | outdoorTempStart, outdoorTempEnd, minTemp, maxTemp, tempSwing, additionalTolerance |
 
 ### CSV-Format (vom Recorder)
@@ -221,6 +222,7 @@ Headless Python-Script das:
 | `POST` | `/recording/start` | Aufzeichnung starten (JSON: name, pn, medium, interval_s) |
 | `POST` | `/recording/stop` | Aufzeichnung stoppen |
 | `GET` | `/recording/status` | Status (laeuft?, Name, Dauer, Samples, letzte Werte) |
+| `POST` | `/wifi/off` | WLAN AP fuer 120s ausschalten, dann automatisch wieder starten |
 | `POST` | `/reboot` | Recorder neustarten (1s Verzoegerung, dann `sudo reboot`) |
 
 ### Secret Key
@@ -429,16 +431,16 @@ Wird nach dem vollstaendigen Protokoll-Flow hochgeladen.
 
 ### Storage Bucket `protokolle`
 
-Hier werden die echten Dateien (PDFs + CSVs) gespeichert:
+Hier werden die echten Dateien (PDFs + CSVs) gespeichert. Dateinamen enthalten einen Timestamp zur Eindeutigkeit:
 
 ```
 protokolle/
-├── Heizung_OG_2026-03-15/
-│   ├── protokoll.pdf
-│   └── messdaten.csv
-├── Badezimmer_EG_2026-03-16/
-│   ├── protokoll.pdf
-│   └── messdaten.csv
+├── Heizung_OG_1739520123456/
+│   ├── protokoll_1739520123456.pdf
+│   └── messdaten_1739520123456.csv
+├── Badezimmer_EG_1739520789012/
+│   ├── protokoll_1739520789012.pdf
+│   └── messdaten_1739520789012.csv
 ```
 
 ### Upload-Ablauf
@@ -506,14 +508,19 @@ Gesamt-Toleranz = Basis-Toleranz + Zusatz-Toleranz
 
 Wetterdaten kommen von **Open-Meteo** (kostenlos, kein API-Key). Wenn kein Internet verfuegbar war, wird die Standard-Toleranz ohne Wetter-Anpassung verwendet.
 
-### Pruefergebnis
+### Pruefergebnis (Profil-basiert)
+
+Die Validierung nutzt **TestProfile** (z.B. SIA 385/1 Wasser, Luft Standard) mit:
+- Plateau-Erkennung (laengste Phase mit Druck >= Soll)
+- Druckabfall: Start- vs. Enddruck (robust gegen Rauschen)
+- Haltezeit, Datenluecken, max. Druckabfall
 
 ```
-Fehler = |Enddruck - erwarteterDruck|
-
-Wenn Fehler ≤ Toleranz → BESTANDEN (kein Leck)
-Wenn Fehler > Toleranz  → NICHT BESTANDEN (moegliche Leckage)
+Wenn alle Kriterien erfuellt → BESTANDEN (kein Leck)
+Sonst → NICHT BESTANDEN (failureReasons)
 ```
+
+Profil wird automatisch aus Medium abgeleitet (Wasser → Wasser Standard, Luft → Luft Standard).
 
 ### Sicherheitsgrenze
 
@@ -548,7 +555,8 @@ prezio_v2/
 │   │   ├── measurement.dart               # Measurement, CsvMetadata, ValidationStatus
 │   │   ├── sample.dart                    # Sample (Einzelmesswert)
 │   │   ├── protocol_data.dart             # ProtocolData, TestMedium
-│   │   └── weather_data.dart              # WeatherData
+│   │   ├── test_profile.dart              # TestProfile (Validierungsprofile)
+│   │   └── weather_data.dart             # WeatherData
 │   │
 │   ├── screens/
 │   │   ├── screens.dart                   # Barrel-Export
@@ -583,7 +591,7 @@ prezio_v2/
 │   │
 │   ├── widgets/
 │   │   ├── widgets.dart                   # Barrel-Export
-│   │   ├── pressure_chart.dart            # Druck/Temperatur-Chart (fl_chart)
+│   │   ├── pressure_chart.dart            # Druck/Temperatur-Chart (fl_chart, smooth)
 │   │   └── measurement_card.dart          # Messungs-Karte
 │   │
 │   └── utils/
@@ -616,7 +624,7 @@ prezio_v2/
 
 ```dart
 appName = 'Prezio'
-appVersion = '2.3.0'
+appVersion = '2.4.0'
 defaultRecorderAddress = '192.168.4.1'
 defaultRecorderPort = 8080
 connectionTimeout = 10 Sekunden
@@ -679,11 +687,13 @@ defaultRecordingInterval = 10.0 Sekunden
    - "Aufzeichnung stoppen" → automatisch weiter
    - Oder: "Aufzeichnungen" → vergangene Messung waehlen
 
-6. **Recorder-Reboot + Internet**
-   - App sendet Reboot-Befehl an Recorder
+6. **Recorder WLAN aus + Internet**
+   - App sendet WLAN-Aus-Befehl an Recorder (`POST /wifi/off`)
+   - Recorder schaltet WLAN fuer 120 Sekunden ab, startet es dann automatisch wieder
    - Benutzer verbindet sich mit normalem WiFi / Mobilfunk
    - App prueft Internet automatisch alle 3 Sekunden
    - **Sofortiger CSV-Upload** zu Supabase (Rohdaten-Sicherung)
+   - **Kein Power-Cycle noetig** - Recorder ist nach 2 Minuten wieder bereit
 
 7. **Standort & Wetter**
    - GPS-Position wird abgerufen
@@ -700,7 +710,8 @@ defaultRecordingInterval = 10.0 Sekunden
 
 9. **Unterschreiben**
    - Monteur unterschreibt auf dem Bildschirm (Normal oder Vollbild)
-   - Druckkurve nochmals sichtbar
+   - Druckkurve wird erfasst und auf Seite 2 des PDFs abgebildet
+   - Zwei identische Unterschriftsfelder (links ausgefuellt, rechts leer fuer Projektleiter)
    - "Protokoll erstellen & speichern"
 
 10. **Automatisch gespeichert**
@@ -774,6 +785,21 @@ cat /home/pi/prezio_key.txt
 - **Climartis** ist die Mutterfirma von Lehmann 2000 und Soleco
 - Das Kolibri-Logo ersetzt den frueheren Kompass
 
+### PDF-Struktur
+
+| Seite | Inhalt |
+|---|---|
+| **Seite 1** | Header (Lehmann 2000), Ort/Datum (immer jetzt), Protokolltext, Druckinfo, Resultat, zwei identische Unterschriftsfelder (links Monteur ausgefuellt, rechts leer), Fusszeile |
+| **Seite 2** | Nur Druckkurve (Diagramm), zentriert |
+
+Datum im PDF ist immer `DateTime.now()` (aktueller Zeitpunkt bei Erstellung). Die Kurve wird per RepaintBoundary vom Chart-Widget erfasst; vor dem Erfassen scrollt die App nach oben und wartet auf das Rendering.
+
+### Chart (Druckkurve)
+
+- **fl_chart** mit Downsampling (~120 Punkte) und Moving Average (Fenster 7) fuer glatte Linien
+- Keine Einzelpunkte, nur Linien
+- Achsen mit festem Raster und lesbaren Labels
+
 ---
 
 ## 12. Cursor-Kontext (Prompt fuer neuen Chat)
@@ -796,6 +822,10 @@ Kopiere folgendes in einen neuen Cursor-Chat um den vollen Kontext zu haben:
 **Anti-Manipulation:** PN und Medium werden bei Aufzeichnungsstart festgelegt und im CSV-Header gespeichert. Bei der Auswertung sind diese Felder gesperrt. Validierung ist automatisch, der Monteur kann nicht manuell "gueltig/ungueltig" waehlen. CSV wird mit SHA-256 gehasht.
 
 **Branding:** App-Logo = Kolibri, PDF-Logo = Lehmann 2000, Settings = Climartis (Mutterfirma).
+
+**PDF:** Seite 1 = Protokoll + zwei identische Unterschriftsfelder (links Monteur, rechts leer). Seite 2 = nur Druckkurve. Datum immer aktuell. Chart: smooth mit Moving Average.
+
+**Recorder:** `POST /wifi/off` schaltet WLAN 120s ab, dann automatisch wieder an – kein Power-Cycle noetig.
 
 **Wichtige Dateien:** Siehe `DOKUMENTATION.md` im Projektroot fuer die komplette Beschreibung aller Dateien, Services, Modelle, API-Endpunkte, Validierungslogik, Supabase-Setup und Hardware-Aufbau.
 
