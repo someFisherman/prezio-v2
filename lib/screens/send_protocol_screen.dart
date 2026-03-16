@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/models.dart';
 import '../providers/providers.dart';
 import '../utils/formatters.dart';
+import 'connect_screen.dart';
 
 class SendProtocolScreen extends ConsumerStatefulWidget {
   final ProtocolData protocolData;
@@ -91,8 +92,10 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
             _buildStatusCard(),
             const SizedBox(height: 24),
             OutlinedButton.icon(
-              onPressed: () =>
-                  Navigator.popUntil(context, (route) => route.isFirst),
+              onPressed: () => Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const ConnectScreen()),
+                (route) => false,
+              ),
               icon: const Icon(Icons.home),
               label: const Text('Zurueck zum Start'),
             ),

@@ -31,6 +31,7 @@ class _SignatureScreenState extends ConsumerState<SignatureScreen> {
 
   final ScrollController _scrollController = ScrollController();
   bool _isFullScreen = false;
+  bool _isFinalizing = false;
 
   @override
   void initState() {
@@ -66,9 +67,17 @@ class _SignatureScreenState extends ConsumerState<SignatureScreen> {
             _buildSignatureCard(),
             const SizedBox(height: 24),
             ElevatedButton.icon(
-              onPressed: _signatureController.isNotEmpty ? _finalize : null,
-              icon: const Icon(Icons.save),
-              label: const Text('Protokoll erstellen & speichern'),
+              onPressed: (_signatureController.isNotEmpty && !_isFinalizing)
+                  ? _finalize
+                  : null,
+              icon: _isFinalizing
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.save),
+              label: Text(_isFinalizing ? 'Wird erstellt...' : 'Protokoll erstellen & speichern'),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
@@ -93,16 +102,13 @@ class _SignatureScreenState extends ConsumerState<SignatureScreen> {
                   ),
             ),
             const SizedBox(height: 16),
-            RepaintBoundary(
-              key: _chartKey,
-              child:             SizedBox(
+            SizedBox(
               width: 400,
               height: 300,
               child: PressureChart(
                 measurement: widget.protocolData.measurement,
                 height: 300,
               ),
-            ),
             ),
           ],
         ),
@@ -276,6 +282,7 @@ class _SignatureScreenState extends ConsumerState<SignatureScreen> {
       }
     } catch (e) {
       if (mounted) {
+        setState(() => _isFinalizing = false);
         Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Fehler: $e')),

@@ -751,6 +751,19 @@ defaultRecordingInterval = 10.0 Sekunden
 | Wetterdaten nicht verfuegbar | Normal wenn auf Recorder-WiFi (kein Internet) |
 | Standort nicht erkannt | GPS-Berechtigung in iOS-Einstellungen pruefen |
 
+### Codemagic iOS-Build (ohne Xcode)
+
+Die App wird ueber Codemagic.io gebaut (kein lokales Xcode noetig). Fuer unsigned IPA:
+
+- **ios/Flutter/Release.xcconfig** enthaelt Code-Signing-Deaktivierung (CODE_SIGN_IDENTITY=, CODE_SIGNING_REQUIRED=NO)
+- **codemagic.yaml** setzt zusaetzlich Umgebungsvariablen vor dem Build
+
+Falls der Build mit "Development Team required" fehlschlaegt:
+1. **Codemagic Dashboard** → App → Workflow → **Code signing** → Apple ID hinzufuegen (benoetigt Apple Developer Account, USD 99/Jahr)
+2. Oder: Codemagic-Dokumentation zu "iOS code signing" pruefen – mit verbundenem Apple-Konto uebernimmt Codemagic die Signierung automatisch
+
+Die unsigned IPA kann mit Sideloadly oder aehnlichen Tools auf Testgeraete installiert werden.
+
 ### Recorder-Logs einsehen
 
 ```bash

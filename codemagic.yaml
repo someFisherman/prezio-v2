@@ -25,13 +25,54 @@ workflows:
     publishing:
       email:
         recipients:
-          - noe.gloor@soleco.ch  # <-- Ersetze mit deiner E-Mail
+          - gloognoe@gmail.com
         notify:
           success: true
           failure: true
 
   # ==========================================
-  # iOS Build (ohne Signierung - für Sideloadly)
+  # iOS Build (signiert - Apple Developer)
+  # ==========================================
+  ios-build-signed:
+    name: iOS Build (Signed)
+    max_build_duration: 30
+    instance_type: mac_mini_m2
+    environment:
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: ch.soleco.prezioV2
+    scripts:
+      - name: Get Flutter packages
+        script: flutter pub get
+      
+      - name: Install CocoaPods dependencies
+        script: |
+          cd ios
+          pod install
+      
+      - name: Set up code signing settings on Xcode project
+        script: xcode-project use-profiles
+      
+      - name: Build iOS IPA (signed)
+        script: flutter build ipa --release
+    
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - build/ios/iphoneos/Runner.app
+    
+    publishing:
+      email:
+        recipients:
+          - gloognoe@gmail.com
+        notify:
+          success: true
+          failure: true
+
+  # ==========================================
+  # iOS Build (unsigned - Fallback ohne Signierung)
   # ==========================================
   ios-build-unsigned:
     name: iOS Build (Unsigned)
@@ -52,6 +93,8 @@ workflows:
       
       - name: Build iOS (unsigned)
         script: |
+          export CODE_SIGN_IDENTITY=""
+          export CODE_SIGNING_REQUIRED=NO
           flutter build ios --release --no-codesign
       
       - name: Create unsigned IPA
@@ -60,7 +103,7 @@ workflows:
           mkdir -p Payload
           cp -r Runner.app Payload/
           zip -r prezio_unsigned.ipa Payload
-          mv prezio_unsigned.ipa ../../../
+          mv prezio_unsigned.ipa ../../.././
     
     artifacts:
       - "*.ipa"
@@ -69,7 +112,7 @@ workflows:
     publishing:
       email:
         recipients:
-          - dein@email.ch  # <-- Ersetze mit deiner E-Mail
+          - gloognoe@gmail.com
         notify:
           success: true
           failure: true
@@ -86,6 +129,9 @@ workflows:
       xcode: latest
       cocoapods: default
       java: 17
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: ch.soleco.prezioV2
     scripts:
       - name: Get Flutter packages
         script: flutter pub get
@@ -100,25 +146,20 @@ workflows:
           cd ios
           pod install
       
-      - name: Build iOS (unsigned)
-        script: flutter build ios --release --no-codesign
+      - name: Set up code signing settings on Xcode project
+        script: xcode-project use-profiles
       
-      - name: Create unsigned IPA
-        script: |
-          cd build/ios/iphoneos
-          mkdir -p Payload
-          cp -r Runner.app Payload/
-          zip -r prezio_unsigned.ipa Payload
-          mv prezio_unsigned.ipa ../../../
+      - name: Build iOS IPA (signed)
+        script: flutter build ipa --release
     
     artifacts:
       - build/app/outputs/flutter-apk/*.apk
-      - "*.ipa"
+      - build/ios/ipa/*.ipa
     
     publishing:
       email:
         recipients:
-          - dein@email.ch  # <-- Ersetze mit deiner E-Mail
+          - gloognoe@gmail.com
         notify:
           success: true
           failure: true
