@@ -78,15 +78,7 @@ class _ConnectScreenState extends ConsumerState<ConnectScreen> {
         }
       }
 
-      // Fallback: Recorder erreichbar aber kein /auth/key Endpoint
-      // (alter Pi-Code) → trotzdem durchlassen
-      _pollTimer?.cancel();
-      if (mounted) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => const RecorderScreen()),
-        );
-      }
+      if (mounted) setState(() => _statusText = 'Authentifizierung fehlgeschlagen');
     } catch (_) {
       if (mounted) setState(() => _statusText = 'Bitte mit Prezio Recorder WLAN verbinden');
     } finally {
