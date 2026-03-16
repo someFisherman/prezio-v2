@@ -45,7 +45,7 @@ import serial.tools.list_ports
 DATA_DIR = Path(__file__).parent / "data"
 KEY_FILE = Path("/home/pi/prezio_key.txt")
 HTTP_PORT = 8080
-DEFAULT_INTERVAL_S = 60
+DEFAULT_INTERVAL_S = 10
 MAX_FILES = 10
 SENSOR_BAUD = 9600
 SENSOR_ADDRESS = 1

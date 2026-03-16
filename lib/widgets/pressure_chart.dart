@@ -133,19 +133,56 @@ class PressureChart extends StatelessWidget {
     );
   }
 
+  /// Downsample to ~maxPoints using averaging for a smooth curve.
+  List<Sample> _downsample(int maxPoints) {
+    final all = measurement.samples;
+    if (all.length <= maxPoints) return all;
+
+    final result = <Sample>[];
+    final bucketSize = all.length / maxPoints;
+
+    for (int i = 0; i < maxPoints; i++) {
+      final start = (i * bucketSize).floor();
+      final end = ((i + 1) * bucketSize).floor().clamp(0, all.length);
+      if (start >= end) continue;
+
+      double pSum = 0, tSum = 0;
+      for (int j = start; j < end; j++) {
+        pSum += all[j].pressureRounded;
+        tSum += all[j].temperatureRounded;
+      }
+      final count = end - start;
+      final mid = all[start + count ~/ 2];
+
+      result.add(Sample(
+        index: mid.index,
+        timestamp: mid.timestamp,
+        timestampUtc: mid.timestampUtc,
+        pressureBar: pSum / count,
+        temperatureC: tSum / count,
+        pressureRounded: double.parse((pSum / count).toStringAsFixed(2)),
+        temperatureRounded: double.parse((tSum / count).toStringAsFixed(2)),
+      ));
+    }
+
+    return result;
+  }
+
   // --- Pressure line ---
   LineChartBarData _pressureLine() {
+    final samples = _downsample(300);
     final spots = <FlSpot>[];
-    for (final s in measurement.samples) {
+    for (final s in samples) {
       final x = s.timestamp.difference(measurement.startTime).inSeconds.toDouble();
       spots.add(FlSpot(x, s.pressureRounded));
     }
     return LineChartBarData(
       spots: spots,
       isCurved: true,
-      curveSmoothness: 0.15,
+      curveSmoothness: 0.35,
+      preventCurveOverShooting: true,
       color: Colors.blue,
-      barWidth: 2,
+      barWidth: 2.5,
       isStrokeCapRound: true,
       dotData: const FlDotData(show: false),
       belowBarData: BarAreaData(
@@ -157,13 +194,14 @@ class PressureChart extends StatelessWidget {
 
   // --- Temperature line (mapped to pressure Y axis) ---
   LineChartBarData _temperatureLine(double pMin, double pMax) {
+    final samples = _downsample(300);
     final spots = <FlSpot>[];
     final tMin = measurement.minTemperature;
     final tMax = measurement.maxTemperature;
     final tRange = tMax - tMin;
     final pRange = pMax - pMin;
 
-    for (final s in measurement.samples) {
+    for (final s in samples) {
       final x = s.timestamp.difference(measurement.startTime).inSeconds.toDouble();
       double y;
       if (tRange < 0.01) {
@@ -176,7 +214,8 @@ class PressureChart extends StatelessWidget {
     return LineChartBarData(
       spots: spots,
       isCurved: true,
-      curveSmoothness: 0.15,
+      curveSmoothness: 0.35,
+      preventCurveOverShooting: true,
       color: Colors.orange,
       barWidth: 1.5,
       isStrokeCapRound: true,
