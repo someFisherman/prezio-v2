@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "604871891802",
+    "project_id": "prezio-dc2c1",
+    "storage_bucket": "prezio-dc2c1.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:604871891802:android:4c8609e4b3402e18077163",
+        "android_client_info": {
+          "package_name": "ch.soleco.prezio_v2"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCtbfCjiuNtUBbe0HJdAUV20O4ShzylJ0A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

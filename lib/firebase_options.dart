@@ -1,20 +1,34 @@
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
+import 'package:flutter/foundation.dart' show defaultTargetPlatform, TargetPlatform;
 
-/// Placeholder - run `flutterfire configure` to generate real options.
-///
-/// Steps:
-/// 1. Create a Firebase project at https://console.firebase.google.com
-/// 2. Install FlutterFire CLI: `dart pub global activate flutterfire_cli`
-/// 3. Run: `flutterfire configure`
-/// 4. This file will be overwritten with real configuration
 class DefaultFirebaseOptions {
-  static const FirebaseOptions currentPlatform = FirebaseOptions(
-    apiKey: 'PLACEHOLDER',
-    appId: 'PLACEHOLDER',
-    messagingSenderId: 'PLACEHOLDER',
-    projectId: 'PLACEHOLDER',
+  static FirebaseOptions get currentPlatform {
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.iOS:
+        return ios;
+      case TargetPlatform.android:
+        return android;
+      default:
+        return ios;
+    }
+  }
+
+  static bool get isConfigured => true;
+
+  static const FirebaseOptions ios = FirebaseOptions(
+    apiKey: 'AIzaSyA07UfM-gTSRBqLuJB42e73PiySkcylKXc',
+    appId: '1:604871891802:ios:e55f3b7e007edb03077163',
+    messagingSenderId: '604871891802',
+    projectId: 'prezio-dc2c1',
+    storageBucket: 'prezio-dc2c1.firebasestorage.app',
+    iosBundleId: 'ch.soleco.prezioV2',
   );
 
-  static bool get isConfigured =>
-      currentPlatform.apiKey != 'PLACEHOLDER';
+  static const FirebaseOptions android = FirebaseOptions(
+    apiKey: 'AIzaSyA07UfM-gTSRBqLuJB42e73PiySkcylKXc',
+    appId: '1:604871891802:ios:e55f3b7e007edb03077163',
+    messagingSenderId: '604871891802',
+    projectId: 'prezio-dc2c1',
+    storageBucket: 'prezio-dc2c1.firebasestorage.app',
+  );
 }

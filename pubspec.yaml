@@ -19,6 +19,11 @@ dependencies:
   http: ^1.4.0
   geolocator: ^14.0.2
   
+  # Firebase
+  firebase_core: ^4.5.0
+  firebase_storage: ^13.1.0
+  cloud_firestore: ^6.1.3
+  
   # Charts
   fl_chart: ^1.0.0
   
