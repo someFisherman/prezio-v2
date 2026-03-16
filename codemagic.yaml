@@ -15,21 +15,13 @@ workflows:
       - name: Get Flutter packages
         script: flutter pub get
       
-      - name: Build AAB (Release - signed)
-        script: flutter build appbundle --release
-
-      - name: Build APK (Release - signed)
+      - name: Build APK (Release)
         script: flutter build apk --release
     
     artifacts:
-      - build/app/outputs/bundle/release/*.aab
       - build/app/outputs/flutter-apk/*.apk
     
     publishing:
-      google_play:
-        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
-        track: internal
-        submit_as_draft: true
       email:
         recipients:
           - gloognoe@gmail.com
@@ -166,8 +158,8 @@ workflows:
         script: flutter pub get
       
       # Android
-      - name: Build Android AAB
-        script: flutter build appbundle --release
+      - name: Build Android APK
+        script: flutter build apk --release
       
       # iOS
       - name: Install CocoaPods
@@ -187,7 +179,7 @@ workflows:
             --build-number=$BUILD_NUM
     
     artifacts:
-      - build/app/outputs/bundle/release/*.aab
+      - build/app/outputs/flutter-apk/*.apk
       - build/ios/ipa/*.ipa
     
     publishing:
