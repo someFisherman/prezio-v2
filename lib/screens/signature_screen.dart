@@ -233,6 +233,11 @@ class _SignatureScreenState extends ConsumerState<SignatureScreen> {
       return;
     }
 
+    // Capture chart BEFORE showing dialog (widget must be visible)
+    final chartBytes = await _captureChart();
+
+    if (!mounted) return;
+
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -240,8 +245,15 @@ class _SignatureScreenState extends ConsumerState<SignatureScreen> {
     );
 
     try {
-      final signatureBytes = await _signatureController.toPngBytes();
-      final chartBytes = await _captureChart();
+      Uint8List? signatureBytes;
+      try {
+        signatureBytes = await _signatureController.toPngBytes(
+          height: 400,
+          width: 800,
+        );
+      } catch (_) {
+        signatureBytes = await _signatureController.toPngBytes();
+      }
 
       final updatedProtocol = widget.protocolData.copyWith(
         signature: signatureBytes,
@@ -272,13 +284,23 @@ class _SignatureScreenState extends ConsumerState<SignatureScreen> {
 
   Future<Uint8List?> _captureChart() async {
     try {
-      final boundary = _chartKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-      if (boundary == null) return null;
+      // Wait for the current frame to finish rendering
+      await Future.delayed(const Duration(milliseconds: 100));
 
-      final image = await boundary.toImage(pixelRatio: 2.0);
+      final boundary = _chartKey.currentContext?.findRenderObject()
+          as RenderRepaintBoundary?;
+      if (boundary == null || boundary.debugNeedsPaint) {
+        await Future.delayed(const Duration(milliseconds: 300));
+      }
+
+      final boundary2 = _chartKey.currentContext?.findRenderObject()
+          as RenderRepaintBoundary?;
+      if (boundary2 == null) return null;
+
+      final image = await boundary2.toImage(pixelRatio: 3.0);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       return byteData?.buffer.asUint8List();
-    } catch (e) {
+    } catch (_) {
       return null;
     }
   }

@@ -49,7 +49,8 @@ class _SendProtocolScreenState extends ConsumerState<SendProtocolScreen> {
         protocolData: widget.protocolData,
       );
 
-      final folderName = localResult.folderPath.split('/').last.split('\\').last;
+      final localFolder = localResult.folderPath.split('/').last.split('\\').last;
+      final folderName = '${localFolder}_${DateTime.now().millisecondsSinceEpoch}';
       setState(() => _savedPath = localResult.folderPath);
 
       final supabaseService = ref.read(supabaseUploadServiceProvider);

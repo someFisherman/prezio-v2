@@ -82,10 +82,11 @@ class SupabaseUploadService {
       final csvHash = sha256.convert(utf8.encode(csvContent)).toString();
       String? pdfStoragePath;
 
-      // 1. Upload PDF to Storage
+      // 1. Upload PDF to Storage (unique name per upload)
+      final ts = DateTime.now().millisecondsSinceEpoch;
       final pdfFile = File(pdfPath);
       if (pdfFile.existsSync()) {
-        pdfStoragePath = '$folderName/protokoll.pdf';
+        pdfStoragePath = '$folderName/protokoll_$ts.pdf';
         final pdfBytes = await pdfFile.readAsBytes();
         final uploadRes = await http.post(
           Uri.parse('$_storageUrl/object/${SupabaseConfig.bucket}/$pdfStoragePath'),
@@ -103,7 +104,7 @@ class SupabaseUploadService {
       }
 
       // 2. Upload CSV to Storage
-      final csvStoragePath = '$folderName/messdaten.csv';
+      final csvStoragePath = '$folderName/messdaten_$ts.csv';
       await http.post(
         Uri.parse('$_storageUrl/object/${SupabaseConfig.bucket}/$csvStoragePath'),
         headers: {

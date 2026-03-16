@@ -74,7 +74,7 @@ class PdfGeneratorService {
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.Image(logo, width: 200, height: 60, fit: pw.BoxFit.contain),
+          pw.Image(logo, width: 300, height: 90, fit: pw.BoxFit.contain),
         ],
       );
     }
@@ -301,7 +301,7 @@ class PdfGeneratorService {
             pw.Text('Datum $dateStr, Unterschrift', style: const pw.TextStyle(fontSize: 11)),
             pw.SizedBox(height: 5),
             if (data.signature != null)
-              pw.Image(pw.MemoryImage(data.signature!), width: 150, height: 50)
+              pw.Image(pw.MemoryImage(data.signature!), width: 200, height: 80)
             else
               pw.Container(
                 width: 200,
