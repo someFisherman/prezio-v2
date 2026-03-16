@@ -182,12 +182,29 @@ class PdfGeneratorService {
     return pw.Column(
       crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
+        if (data.testProfileName != null && data.testProfileName!.isNotEmpty)
+          _buildInfoRow('Pruefprofil:', data.testProfileName!),
         _buildInfoRow('Betriebsdruck:', data.nominalPressure > 0 ? 'PN ${data.nominalPressure}' : '-'),
         _buildInfoRow('Druckpruefung:', data.testMedium.displayName),
         _buildInfoRow('Pruefdruck:', Formatters.formatPressureWithUnit(data.testPressure)),
         _buildInfoRow('Pruefdauer:', testDuration),
+        if (data.detectedHoldDurationHours > 0)
+          _buildInfoRow('Erkannte Haltezeit:', _formatPdfHours(data.detectedHoldDurationHours)),
+        if (data.pressureDropBar > 0)
+          _buildInfoRow('Druckabfall:', '${data.pressureDropBar.toStringAsFixed(3)} bar'),
       ],
     );
+  }
+
+  String _formatPdfHours(double hours) {
+    if (hours < 1.0) {
+      final mins = (hours * 60).round();
+      return '${mins}min';
+    }
+    final h = hours.floor();
+    final m = ((hours - h) * 60).round();
+    if (m == 0) return '${h}h';
+    return '${h}h ${m}min';
   }
 
   pw.Widget _buildInfoRow(String label, String value) {
@@ -224,17 +241,32 @@ class PdfGeneratorService {
   pw.Widget _buildResult(ProtocolData data) {
     final resultText = data.passed ? 'OK' : 'Nicht OK';
 
-    return pw.Row(
+    return pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
       children: [
-        pw.Text(
-          'Resultat:',
-          style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
+        pw.Row(
+          children: [
+            pw.Text(
+              'Resultat:',
+              style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.SizedBox(width: 70),
+            pw.Text(
+              resultText,
+              style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
+            ),
+          ],
         ),
-        pw.SizedBox(width: 70),
-        pw.Text(
-          resultText,
-          style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
-        ),
+        if (data.failureReasons.isNotEmpty) ...[
+          pw.SizedBox(height: 6),
+          ...data.failureReasons.map((r) => pw.Padding(
+                padding: const pw.EdgeInsets.only(left: 10, bottom: 2),
+                child: pw.Text(
+                  '- $r',
+                  style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700),
+                ),
+              )),
+        ],
       ],
     );
   }

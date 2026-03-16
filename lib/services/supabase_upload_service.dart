@@ -137,6 +137,13 @@ class SupabaseUploadService {
         'passed': protocolData.passed,
         'result': protocolData.result,
         'validation_reason': protocolData.validationReason,
+        'test_profile_id': protocolData.testProfileId,
+        'test_profile_name': protocolData.testProfileName,
+        'detected_hold_duration_hours': protocolData.detectedHoldDurationHours,
+        'pressure_drop_bar': protocolData.pressureDropBar,
+        'failure_reasons': protocolData.failureReasons.isNotEmpty
+            ? protocolData.failureReasons.join('; ')
+            : null,
         'csv_sha256': csvHash,
         'pdf_path': pdfStoragePath,
       };

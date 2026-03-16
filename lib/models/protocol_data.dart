@@ -54,6 +54,12 @@ class ProtocolData {
   final double? latitude;
   final double? longitude;
 
+  final String? testProfileId;
+  final String? testProfileName;
+  final double detectedHoldDurationHours;
+  final double pressureDropBar;
+  final List<String> failureReasons;
+
   const ProtocolData({
     required this.measurement,
     this.objectName = '',
@@ -74,6 +80,11 @@ class ProtocolData {
     this.location,
     this.latitude,
     this.longitude,
+    this.testProfileId,
+    this.testProfileName,
+    this.detectedHoldDurationHours = 0.0,
+    this.pressureDropBar = 0.0,
+    this.failureReasons = const [],
   });
 
   ProtocolData copyWith({
@@ -96,6 +107,11 @@ class ProtocolData {
     String? location,
     double? latitude,
     double? longitude,
+    String? testProfileId,
+    String? testProfileName,
+    double? detectedHoldDurationHours,
+    double? pressureDropBar,
+    List<String>? failureReasons,
   }) {
     return ProtocolData(
       measurement: measurement ?? this.measurement,
@@ -117,6 +133,11 @@ class ProtocolData {
       location: location ?? this.location,
       latitude: latitude ?? this.latitude,
       longitude: longitude ?? this.longitude,
+      testProfileId: testProfileId ?? this.testProfileId,
+      testProfileName: testProfileName ?? this.testProfileName,
+      detectedHoldDurationHours: detectedHoldDurationHours ?? this.detectedHoldDurationHours,
+      pressureDropBar: pressureDropBar ?? this.pressureDropBar,
+      failureReasons: failureReasons ?? this.failureReasons,
     );
   }
 }

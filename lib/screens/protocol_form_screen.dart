@@ -35,11 +35,19 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
 
   int _selectedPN = 25;
   TestMedium _selectedMedium = TestMedium.air;
+  late TestProfile _selectedProfile;
   ValidationResult? _validationResult;
   List<NominatimPlace> _locationSuggestions = [];
   Timer? _searchDebounce;
   double? _latitude;
   double? _longitude;
+
+  // Custom profile overrides
+  late TextEditingController _customHoldHoursController;
+  late TextEditingController _customMaxDropController;
+  late TextEditingController _customFactorController;
+  late TextEditingController _customRatioController;
+  late TextEditingController _customGapController;
 
   bool get _hasLockedParams => widget.measurement.hasRecordingMetadata;
 
@@ -58,6 +66,20 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
       _selectedPN = meta.pn!;
       _selectedMedium = meta.medium == 'water' ? TestMedium.water : TestMedium.air;
     }
+
+    _selectedProfile = TestProfile.findForMedium(_selectedMedium) ??
+        TestProfile.defaultProfiles.first;
+
+    _customHoldHoursController =
+        TextEditingController(text: _selectedProfile.holdDurationHours.toString());
+    _customMaxDropController =
+        TextEditingController(text: _selectedProfile.maxPressureDropBar.toString());
+    _customFactorController =
+        TextEditingController(text: _selectedProfile.pressureFactor.toString());
+    _customRatioController =
+        TextEditingController(text: _selectedProfile.minValidPressureRatio.toString());
+    _customGapController =
+        TextEditingController(text: _selectedProfile.maxDataGapSeconds.toString());
 
     _loadStoredValues();
     _runValidation();
@@ -132,19 +154,32 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
     });
   }
 
+  TestProfile get _activeProfile {
+    if (!_selectedProfile.isCustom) return _selectedProfile;
+
+    return _selectedProfile.copyWith(
+      medium: _selectedMedium,
+      pressureFactor: double.tryParse(_customFactorController.text) ?? 1.5,
+      holdDurationHours: double.tryParse(_customHoldHoursController.text) ?? 1.0,
+      minValidPressureRatio: double.tryParse(_customRatioController.text) ?? 0.98,
+      maxPressureDropBar: double.tryParse(_customMaxDropController.text) ?? 0.2,
+      maxDataGapSeconds: int.tryParse(_customGapController.text) ?? 60,
+    );
+  }
+
   void _runValidation() {
     final validationService = ref.read(validationServiceProvider);
     setState(() {
       _validationResult = validationService.validate(
         widget.measurement,
         _selectedPN,
-        _selectedMedium,
+        _activeProfile,
         weather: widget.weatherData,
       );
     });
   }
 
-  double get _testPressure => ValidationService.getTestPressure(_selectedPN, _selectedMedium);
+  double get _testPressure => _activeProfile.getRequiredPressure(_selectedPN);
 
   @override
   void dispose() {
@@ -154,6 +189,11 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
     _technicianController.dispose();
     _notesController.dispose();
     _locationController.dispose();
+    _customHoldHoursController.dispose();
+    _customMaxDropController.dispose();
+    _customFactorController.dispose();
+    _customRatioController.dispose();
+    _customGapController.dispose();
     _searchDebounce?.cancel();
     super.dispose();
   }
@@ -194,19 +234,7 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
               const SizedBox(height: 16),
               _buildLocationCard(),
               const SizedBox(height: 16),
-              _buildSectionCard(
-                'Druckpruefung',
-                [
-                  _buildPNDropdown(),
-                  const SizedBox(height: 8),
-                  _buildMediumDropdown(),
-                  const SizedBox(height: 12),
-                  _buildReadOnlyRow('Pruefdruck', '${Formatters.formatPressure(_testPressure)} bar'),
-                  _buildReadOnlyRow('Pruefart', 'Manometer'),
-                  _buildReadOnlyRow('Pruefdauer', Formatters.formatDuration(widget.measurement.duration)),
-                  _buildReadOnlyRow('Messpunkte', widget.measurement.samples.length.toString()),
-                ],
-              ),
+              _buildPressureTestCard(),
               const SizedBox(height: 16),
               _buildWeatherCard(),
               const SizedBox(height: 16),
@@ -255,6 +283,127 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildPressureTestCard() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Druckpruefung',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 16),
+            _buildProfileDropdown(),
+            const SizedBox(height: 12),
+            _buildPNDropdown(),
+            const SizedBox(height: 8),
+            _buildMediumDropdown(),
+            if (_selectedProfile.isCustom) ...[
+              const SizedBox(height: 16),
+              const Divider(),
+              const SizedBox(height: 8),
+              Text('Benutzerdefinierte Parameter',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w500,
+                    color: Colors.grey[700],
+                    fontSize: 13,
+                  )),
+              const SizedBox(height: 12),
+              _buildCustomParamField(
+                controller: _customFactorController,
+                label: 'Druckfaktor (x PN)',
+                suffix: 'x',
+              ),
+              _buildCustomParamField(
+                controller: _customHoldHoursController,
+                label: 'Haltezeit',
+                suffix: 'h',
+              ),
+              _buildCustomParamField(
+                controller: _customMaxDropController,
+                label: 'Max. Druckabfall',
+                suffix: 'bar',
+              ),
+              _buildCustomParamField(
+                controller: _customRatioController,
+                label: 'Min. Druck-Ratio',
+                suffix: '',
+              ),
+              _buildCustomParamField(
+                controller: _customGapController,
+                label: 'Max. Datenluecke',
+                suffix: 's',
+              ),
+            ],
+            const SizedBox(height: 12),
+            _buildReadOnlyRow('Pruefdruck', '${Formatters.formatPressure(_testPressure)} bar'),
+            _buildReadOnlyRow('Pruefart', 'Manometer'),
+            _buildReadOnlyRow('Pruefdauer', Formatters.formatDuration(widget.measurement.duration)),
+            _buildReadOnlyRow('Messpunkte', widget.measurement.samples.length.toString()),
+            if (!_selectedProfile.isCustom) ...[
+              _buildReadOnlyRow('Haltezeit (Soll)', '${_selectedProfile.holdDurationHours}h'),
+              _buildReadOnlyRow('Max. Druckabfall', '${_selectedProfile.maxPressureDropBar} bar'),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCustomParamField({
+    required TextEditingController controller,
+    required String label,
+    required String suffix,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: TextFormField(
+        controller: controller,
+        decoration: InputDecoration(
+          labelText: label,
+          suffixText: suffix,
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        ),
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        onChanged: (_) => _runValidation(),
+      ),
+    );
+  }
+
+  Widget _buildProfileDropdown() {
+    return DropdownButtonFormField<String>(
+      initialValue: _selectedProfile.id,
+      decoration: const InputDecoration(
+        labelText: 'Pruefprofil',
+        prefixIcon: Icon(Icons.tune),
+      ),
+      items: TestProfile.defaultProfiles.map((p) {
+        return DropdownMenuItem(
+          value: p.id,
+          child: Text(p.name),
+        );
+      }).toList(),
+      onChanged: (value) {
+        if (value != null) {
+          final profile = TestProfile.defaultProfiles.firstWhere((p) => p.id == value);
+          setState(() {
+            _selectedProfile = profile;
+            if (!profile.isCustom) {
+              _selectedMedium = profile.medium;
+            }
+            _customHoldHoursController.text = profile.holdDurationHours.toString();
+            _customMaxDropController.text = profile.maxPressureDropBar.toString();
+            _customFactorController.text = profile.pressureFactor.toString();
+            _customRatioController.text = profile.minValidPressureRatio.toString();
+            _customGapController.text = profile.maxDataGapSeconds.toString();
+          });
+          _runValidation();
+        }
+      },
     );
   }
 
@@ -391,7 +540,7 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
               )
             : null,
       ),
-      items: ValidationService.pnValues.map((pn) {
+      items: TestProfile.pnValues.map((pn) {
         return DropdownMenuItem(
           value: pn,
           child: Text('PN $pn'),
@@ -531,7 +680,8 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
 
   Widget _buildValidationCard() {
     final result = _validationResult;
-    final passed = result?.valid ?? false;
+    final passed = result?.isPassed ?? false;
+    final isValid = result?.isValidMeasurement ?? false;
     final color = passed ? Colors.green : Colors.red;
 
     return Card(
@@ -564,15 +714,67 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
             ),
             if (result != null) ...[
               const SizedBox(height: 12),
-              Text(
-                result.reason,
-                style: TextStyle(color: Colors.grey[700]),
+              _buildReadOnlyRow('Profil', result.profileName),
+              _buildReadOnlyRow(
+                'Pruefdruck (Soll)',
+                '${Formatters.formatPressure(result.requiredPressureBar)} bar',
               ),
+              if (isValid) ...[
+                _buildReadOnlyRow(
+                  'Erkannte Haltezeit',
+                  _formatHours(result.detectedHoldDurationHours),
+                ),
+                _buildReadOnlyRow(
+                  'Druckabfall',
+                  '${result.pressureDropBar.toStringAsFixed(3)} bar',
+                ),
+                if (result.evaluationWindowStart != null)
+                  _buildReadOnlyRow(
+                    'Prueffenster',
+                    '${Formatters.formatDateTime(result.evaluationWindowStart!)} - '
+                        '${Formatters.formatTime(result.evaluationWindowEnd!)}',
+                  ),
+              ],
+              const SizedBox(height: 8),
+              ...result.failureReasons.map((r) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          passed ? Icons.info_outline : Icons.warning_amber_rounded,
+                          size: 16,
+                          color: passed ? Colors.green[700] : Colors.red[700],
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            r,
+                            style: TextStyle(
+                              color: passed ? Colors.green[800] : Colors.red[800],
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )),
             ],
           ],
         ),
       ),
     );
+  }
+
+  String _formatHours(double hours) {
+    if (hours < 1.0) {
+      final mins = (hours * 60).round();
+      return '${mins}min';
+    }
+    final h = hours.floor();
+    final m = ((hours - h) * 60).round();
+    if (m == 0) return '${h}h';
+    return '${h}h ${m}min';
   }
 
   Widget _buildChartCard() {
@@ -611,7 +813,8 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
     await storage.setLastObjectName(_objectController.text);
     await storage.setLastProjectName(_projectController.text);
 
-    final passed = _validationResult?.valid ?? false;
+    final passed = _validationResult?.isPassed ?? false;
+    final profile = _activeProfile;
 
     final protocolData = ProtocolData(
       measurement: widget.measurement,
@@ -630,6 +833,11 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
       location: _locationController.text.isEmpty ? null : _locationController.text,
       latitude: _latitude,
       longitude: _longitude,
+      testProfileId: profile.id,
+      testProfileName: profile.name,
+      detectedHoldDurationHours: _validationResult?.detectedHoldDurationHours ?? 0.0,
+      pressureDropBar: _validationResult?.pressureDropBar ?? 0.0,
+      failureReasons: _validationResult?.failureReasons ?? [],
     );
 
     ref.read(protocolDataProvider.notifier).state = protocolData;
