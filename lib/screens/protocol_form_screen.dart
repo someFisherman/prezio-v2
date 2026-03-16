@@ -28,7 +28,6 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
 
   late TextEditingController _objectController;
   late TextEditingController _projectController;
-  late TextEditingController _authorController;
   late TextEditingController _technicianController;
   late TextEditingController _notesController;
   late TextEditingController _locationController;
@@ -48,7 +47,6 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
     super.initState();
     _objectController = TextEditingController();
     _projectController = TextEditingController();
-    _authorController = TextEditingController();
     _technicianController = TextEditingController();
     _notesController = TextEditingController();
     _locationController = TextEditingController();
@@ -155,7 +153,6 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
   void dispose() {
     _objectController.dispose();
     _projectController.dispose();
-    _authorController.dispose();
     _technicianController.dispose();
     _notesController.dispose();
     _locationController.dispose();
@@ -190,9 +187,15 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
                     icon: Icons.folder,
                   ),
                   _buildTextField(
-                    controller: _authorController,
-                    label: 'Verfasser',
-                    icon: Icons.person_outline,
+                    controller: _technicianController,
+                    label: 'Monteur',
+                    icon: Icons.badge,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Bitte Namen eingeben';
+                      }
+                      return null;
+                    },
                   ),
                 ],
               ),
@@ -215,23 +218,6 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
                     label: 'Bemerkungen',
                     icon: Icons.note,
                     maxLines: 3,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              _buildSectionCard(
-                'Monteur',
-                [
-                  _buildTextField(
-                    controller: _technicianController,
-                    label: 'Name',
-                    icon: Icons.badge,
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Bitte Namen eingeben';
-                      }
-                      return null;
-                    },
                   ),
                 ],
               ),
@@ -673,7 +659,7 @@ class _ProtocolFormScreenState extends ConsumerState<ProtocolFormScreen> {
       measurement: widget.measurement,
       objectName: _objectController.text,
       projectName: _projectController.text,
-      author: _authorController.text,
+      author: _technicianController.text,
       nominalPressure: _selectedPN,
       testMedium: _selectedMedium,
       testPressure: _testPressure,
