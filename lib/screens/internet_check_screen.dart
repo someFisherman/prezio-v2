@@ -43,9 +43,11 @@ class _InternetCheckScreenState extends ConsumerState<InternetCheckScreen> {
     if (!_rebootSent) {
       try {
         final service = ref.read(measurementServiceProvider);
-        await service.recorderConnection.rebootRecorder();
+        await service.recorderConnection.turnOffWifi();
       } catch (_) {}
       _rebootSent = true;
+      // Give the Pi 3s to shut down WiFi before checking internet
+      await Future.delayed(const Duration(seconds: 3));
     }
     _checkConnection();
   }
@@ -161,7 +163,7 @@ class _InternetCheckScreenState extends ConsumerState<InternetCheckScreen> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'Der Prezio Recorder wurde neu gestartet.\n'
+                  'Das Prezio Recorder WLAN wurde abgeschaltet.\n'
                   'Bitte mit normalem WiFi oder Mobilfunk verbinden.',
                   textAlign: TextAlign.center,
                   style: TextStyle(

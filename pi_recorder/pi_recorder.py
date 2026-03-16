@@ -16,6 +16,7 @@ API Endpoints:
   POST /recording/start   - Start recording
   POST /recording/stop    - Stop recording
   GET  /recording/status  - Current recording status
+  POST /wifi/off          - Turn off WiFi AP (restored on next power cycle)
   POST /reboot            - Reboot the Prezio Recorder
 """
 
@@ -587,6 +588,17 @@ class PrezioHTTPHandler(http.server.BaseHTTPRequestHandler):
             result = rec.stop_recording()
             status = 200 if "status" in result else 409
             self._send_json(result, status)
+            return
+
+        if path == "/wifi/off":
+            self._send_json({"status": "wifi_off"})
+            _log("WiFi-off requested via API")
+            def _stop_wifi():
+                time.sleep(2)
+                subprocess.run(["sudo", "ip", "link", "set", "wlan0", "down"], check=False)
+                subprocess.run(["sudo", "systemctl", "stop", "hostapd"], check=False)
+                _log("WiFi AP stopped. Will be back on next power cycle.")
+            threading.Thread(target=_stop_wifi, daemon=True).start()
             return
 
         if path == "/reboot":

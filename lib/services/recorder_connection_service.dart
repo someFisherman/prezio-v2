@@ -158,6 +158,17 @@ class RecorderConnectionService {
     }
   }
 
+  Future<bool> turnOffWifi() async {
+    try {
+      final response = await http
+          .post(Uri.parse('$baseUrl/wifi/off'))
+          .timeout(AppConstants.connectionTimeout);
+      return response.statusCode == 200;
+    } catch (e) {
+      return false;
+    }
+  }
+
   Future<bool> rebootRecorder() async {
     try {
       final response = await http
