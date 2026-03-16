@@ -338,8 +338,6 @@ class PdfGeneratorService {
   pw.Widget _buildPressureTable(ProtocolData data) {
     final testDuration = data.testDuration.isNotEmpty ? data.testDuration : Formatters.formatDuration(data.measurement.duration);
     final rows = <List<String>>[
-      if (data.testProfileName != null && data.testProfileName!.isNotEmpty)
-        ['Pruefprofil', data.testProfileName!],
       ['Betriebsdruck', data.nominalPressure > 0 ? 'PN ${data.nominalPressure}' : '-'],
       ['Druckpruefung', data.testMedium.displayName],
       ['Pruefdruck', Formatters.formatPressureWithUnit(data.testPressure)],
