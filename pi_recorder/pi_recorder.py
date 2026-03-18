@@ -43,7 +43,7 @@ import serial.tools.list_ports
 # Configuration
 # ============================================================
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 DATA_DIR = Path(__file__).parent / "data"
 KEY_FILE = Path("/home/pi/prezio_key.txt")

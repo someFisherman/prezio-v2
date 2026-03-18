@@ -22,7 +22,7 @@ from urllib.request import urlopen, Request
 # ============================================================
 # Config
 # ============================================================
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 GITHUB_REPO = "someFisherman/prezio-v2"
 GITHUB_API  = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
