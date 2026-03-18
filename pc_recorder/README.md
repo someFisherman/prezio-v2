@@ -1,6 +1,6 @@
 # Prezio PC Recorder
 
-Windows-Tool zum Auslesen des KELLER LEO5 Drucksensors und Bereitstellen der Daten fuer die Prezio App.
+Windows-Tool zum Auslesen des KELLER LEO5 Drucksensors und Bereitstellen der Daten fuer die Prezio App. Ersetzt den Raspberry Pi fuer Entwicklung und Tests am Windows-PC.
 
 ## Features
 
@@ -12,13 +12,27 @@ Windows-Tool zum Auslesen des KELLER LEO5 Drucksensors und Bereitstellen der Dat
 
 ## Installation
 
-1. Python 3.x installieren (falls nicht vorhanden)
+### Variante A: PrezioHub Installer (empfohlen)
+
+Der PC Recorder ist im **PrezioHub Installer** enthalten (`PrezioHub_Setup_1.0.0.exe`). Nach der Installation steht `PrezioRecorder.exe` zur Verfuegung - kein Python noetig.
+
+Das Tool kann auch direkt aus dem PrezioHub Dashboard unter dem Tab "Tools" gestartet werden.
+
+### Variante B: Aus dem Quellcode
+
+1. Python 3.x installieren
 2. PySerial installieren:
    ```
    pip install pyserial
    ```
 
 ## Starten
+
+### Als .exe (nach Installation)
+
+Doppelklick auf `PrezioRecorder.exe` oder ueber PrezioHub > Tools > PC Recorder.
+
+### Aus dem Quellcode
 
 Doppelklick auf `start_recorder.bat`
 
@@ -79,3 +93,8 @@ Das gleiche Skript kann auf dem Raspberry Pi laufen:
 - Der HTTP-Server startet automatisch beim Programmstart
 - Messungen werden automatisch im `data/` Ordner gespeichert
 - Die App kann jederzeit die Dateien abrufen, auch waehrend einer Aufzeichnung
+
+## Siehe auch
+
+- [PrezioHub Anleitung](../PrezioHub_Anleitung.md) - Zentrale Steuerungsoberflaeche
+- [Technische Dokumentation](../DOKUMENTATION.md) - Vollstaendige Systemreferenz

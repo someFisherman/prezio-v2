@@ -16,12 +16,14 @@
 4. [Prezio Recorder (Raspberry Pi)](#4-prezio-recorder-raspberry-pi)
 5. [Neues Geraet bauen (Pi Zero 2 W)](#5-neues-geraet-bauen-pi-zero-2-w)
 6. [Supabase Cloud-Speicher](#6-supabase-cloud-speicher)
-7. [Validierungslogik](#7-validierungslogik)
-8. [Dateistruktur & Code-Referenz](#8-dateistruktur--code-referenz)
-9. [Ablauf (End-to-End)](#9-ablauf-end-to-end)
-10. [Fehlerbehebung](#10-fehlerbehebung)
-11. [Branding & Logos](#11-branding--logos)
-12. [Cursor-Kontext (Prompt fuer neuen Chat)](#12-cursor-kontext-prompt-fuer-neuen-chat)
+7. [PrezioHub (Windows-Dashboard)](#7-preziohub-windows-dashboard)
+8. [Installer & Distribution](#8-installer--distribution)
+9. [Validierungslogik](#9-validierungslogik)
+10. [Dateistruktur & Code-Referenz](#10-dateistruktur--code-referenz)
+11. [Ablauf (End-to-End)](#11-ablauf-end-to-end)
+12. [Fehlerbehebung](#12-fehlerbehebung)
+13. [Branding & Logos](#13-branding--logos)
+14. [Cursor-Kontext (Prompt fuer neuen Chat)](#14-cursor-kontext-prompt-fuer-neuen-chat)
 
 ---
 
@@ -283,7 +285,7 @@ SENSOR_ADDRESS = 1         # Modbus-Adresse des Sensors
    - Hostname: `prezio-pi`
    - SSH aktivieren: Ja, mit Passwort
    - Benutzername: `pi`
-   - Passwort: `Prezio2026!` (oder ein eigenes)
+   - Passwort: `Prezio2000!` (muss mit PrezioHub-Config uebereinstimmen)
    - **WLAN konfigurieren:** Dein Buero-/Heim-WiFi eintragen (fuer Ersteinrichtung!)
    - Zeitzone: `Europe/Zurich`
 4. "Schreiben" klicken und warten
@@ -467,7 +469,145 @@ Das Buero greift ueber https://supabase.com/dashboard auf die Daten zu:
 
 ---
 
-## 7. Validierungslogik
+## 7. PrezioHub (Windows-Dashboard)
+
+PrezioHub ist die zentrale Steuerungsoberflaeche fuer Techniker und Entwickler. Es buendelt alle Werkzeuge, Fernsteuerung und Dokumentationen in einer Desktop-Anwendung.
+
+### Funktionen
+
+| Tab | Funktion |
+|-----|----------|
+| **Dashboard** | Live-Status des Raspberry Pi (Verbindung, Sensor, Service, WiFi) |
+| **SSH / Terminal** | PowerShell mit SSH-Verbindung zum Pi oeffnen |
+| **Aufzeichnung** | Fernsteuerung: Aufzeichnung starten/stoppen, Status anzeigen |
+| **Tools** | PrezioImager, PC Recorder und Dummy Server starten |
+| **Supabase** | Cloud-Dashboard oeffnen, Rohdaten und Protokolle anzeigen |
+| **Dokumentation** | Alle Projekt-Dokumentationen oeffnen |
+
+### Technik
+
+- **Framework:** Python 3 / Tkinter
+- **Kommunikation:** HTTP REST API zum Pi (Port 8080)
+- **Netzwerk:** PC muss mit WiFi "Prezio-Recorder" verbunden sein
+- **Quellcode:** `prezio_hub/prezio_hub.py`
+
+### Enthaltene Tools (als .exe)
+
+| Executable | Beschreibung | Admin noetig? |
+|-----------|-------------|---------------|
+| `PrezioHub.exe` | Zentrale Steuerung | Nein |
+| `PrezioImager.exe` | SD-Karten Flash Tool | Ja (UAC) |
+| `PrezioRecorder.exe` | Windows-Sensor-Recorder | Nein |
+| `PrezioDummy.exe` | Mock-Server (Konsolenfenster) | Nein |
+
+---
+
+## 8. Installer & Distribution
+
+### Uebersicht
+
+Alle Windows-Werkzeuge werden als eigenstaendige `.exe`-Dateien mit PyInstaller gebaut. Der Installer wird mit Inno Setup erstellt. Endbenutzer brauchen kein Python.
+
+### Build-Prozess
+
+```
+1. python build_all.py          → Baut alle 4 .exe + kopiert Dokumentation
+2. Inno Setup kompilieren       → Erzeugt PrezioHub_Setup_1.0.0.exe
+```
+
+### Distribution bauen
+
+```bash
+cd prezio_v2/prezio_hub
+python build_all.py
+```
+
+Erzeugt `dist/PrezioHub/` mit:
+- 4 Executables (PrezioHub, PrezioImager, PrezioRecorder, PrezioDummy)
+- `docs/` Ordner mit allen Dokumentationen (umbenannt fuer Lesbarkeit)
+
+### Installer erstellen
+
+1. **Inno Setup** installieren: https://jrsoftware.org/isdl.php
+2. `prezio_hub/prezio_installer.iss` oeffnen
+3. "Compile" klicken
+4. Ergebnis: `installer_output/PrezioHub_Setup_1.0.0.exe`
+
+### Was der Installer macht
+
+- Installiert nach `C:\Program Files\PrezioHub`
+- Erstellt Startmenue-Eintraege (Soleco AG > PrezioHub)
+- Optionale Desktop-Verknuepfungen
+- Saubere Deinstallation ueber Windows "Apps & Features"
+- Kein Python oder andere Abhaengigkeiten noetig
+
+### Versionierung
+
+Alle Komponenten haben eine `VERSION` Konstante:
+
+| Datei | Konstante | Verwendung |
+|-------|-----------|------------|
+| `prezio_hub/prezio_hub.py` | `VERSION = "1.0.0"` | Hub Auto-Update-Check |
+| `pi_recorder/pi_recorder.py` | `VERSION = "1.0.0"` | Pi-Firmware-Update, wird ueber `/health` zurueckgegeben |
+| `pi_recorder/prezio_imager.py` | `VERSION = "1.0.0"` | Fuer spaetere Nutzung |
+| `prezio_hub/version_info.py` | `filevers=(1,0,0,0)` | Windows-Dateiinfos der EXE |
+| `prezio_hub/prezio_installer.iss` | `MyAppVersion "1.0.0"` | Installer-Versionsnummer |
+
+Die Version muss zum GitHub Release Tag passen: Tag `v1.0.1` = VERSION `"1.0.1"`.
+
+### Update-System
+
+PrezioHub hat ein eingebautes Update-System basierend auf GitHub Releases.
+
+**GitHub API Endpoint:** `GET https://api.github.com/repos/someFisherman/prezio-v2/releases/latest`
+
+#### Hub Auto-Update (beim Start)
+
+1. PrezioHub startet → Hintergrund-Thread prueft GitHub API
+2. Vergleicht eigene `VERSION` mit dem `tag_name` des neuesten Releases
+3. Falls neuer: Gruener Banner oben im Fenster mit "Jetzt herunterladen"
+4. Klick sucht in den Release-Assets nach einer `*Setup*.exe`
+5. Download → Speichern → optional Installer starten und Hub schliessen
+
+Kein stilles Auto-Update - der Benutzer entscheidet immer selbst.
+
+#### Pi-Firmware-Update (Tab "Pi-Steuerung")
+
+1. Button "Pi-Firmware pruefen" fragt `GET /health` vom Pi → `version` Feld
+2. Gleichzeitig: GitHub API → neuestes Release Tag
+3. Versionsvergleich (Semver Tuple-Vergleich)
+4. Falls neuer: Changelog + "Jetzt updaten" Button
+5. Update-Ablauf:
+   a. Download des Release-ZIP von `https://github.com/{repo}/archive/refs/tags/{tag}.zip`
+   b. Entpacken, `pi_recorder/pi_recorder.py` extrahieren
+   c. SFTP-Upload auf den Pi nach `/home/pi/prezio-v2/pi_recorder/pi_recorder.py`
+   d. SSH: `sudo systemctl restart prezio-recorder`
+   e. Bestaetigung oder Fehlermeldung anzeigen
+
+**Technische Details:**
+- SFTP und SSH laufen ueber `paramiko` (im Hub gebundelt)
+- Temporaere Dateien werden nach dem Upload automatisch geloescht
+- Der Pi braucht kein Internet - der Hub laedt das Update und schiebt es per SFTP
+
+### Neues Release erstellen
+
+```
+1. Code aendern, VERSION erhoehen in allen betroffenen Dateien
+2. git commit + git push
+3. python build_all.py
+4. Inno Setup kompilieren → PrezioHub_Setup_X.Y.Z.exe
+5. GitHub Release erstellen:
+   - Tag: vX.Y.Z  (muss zu VERSION passen!)
+   - Beschreibung/Changelog eintragen
+   - Asset: PrezioHub_Setup_X.Y.Z.exe hochladen
+   - Publish
+```
+
+**Wichtig:** Ein `git push` allein genuegt nicht. Der Hub prueft ausschliesslich GitHub Releases, nicht Commits.
+
+---
+
+## 9. Validierungslogik
 
 ### Physikalisches Modell
 
@@ -539,7 +679,7 @@ Verfuegbar: 6, 10, 16, 20, 25, 32, 40, 50, 63, 80, 100 bar
 
 ---
 
-## 8. Dateistruktur & Code-Referenz
+## 10. Dateistruktur & Code-Referenz
 
 ```
 prezio_v2/
@@ -608,7 +748,28 @@ prezio_v2/
 │   └── data/                              # CSV-Dateien (zur Laufzeit erstellt)
 │
 ├── pc_recorder/                           # PC-Version des Recorders (mit GUI)
+│   ├── prezio_recorder.py                 # Hauptprogramm (Tkinter + HTTP-Server)
+│   ├── start_recorder.bat                 # Startscript
+│   └── requirements.txt                   # pyserial
+│
 ├── dummy_server/                          # Test-Server fuer Entwicklung
+│   ├── server.py                          # Mock-Server (simuliert Pi-API)
+│   ├── start_server.bat                   # Startscript
+│   └── data/                              # Beispiel-CSV-Dateien
+│
+├── prezio_hub/                            # PrezioHub Dashboard + Distribution
+│   ├── prezio_hub.py                      # Zentrale Steuerungsoberflaeche (Tkinter)
+│   ├── prezio_hub.ico                     # Anwendungs-Icon
+│   ├── build_all.py                       # Baut alle 4 .exe mit PyInstaller
+│   ├── prezio_installer.iss               # Inno Setup Installer-Script
+│   ├── version_info.py                    # Windows-Versionsinformationen
+│   └── dist/PrezioHub/                    # Fertige Distribution (nach Build)
+│       ├── PrezioHub.exe
+│       ├── PrezioImager.exe
+│       ├── PrezioRecorder.exe
+│       ├── PrezioDummy.exe
+│       └── docs/                          # Dokumentationen (umbenannt)
+│
 ├── assets/images/
 │   ├── kolibri.png                        # App-Logo (Kolibri)
 │   ├── lehmann2000.png                    # PDF-Logo (Lehmann 2000)
@@ -617,6 +778,7 @@ prezio_v2/
 ├── android/                               # Android-spezifisch
 ├── pubspec.yaml                           # Flutter-Abhaengigkeiten
 ├── DOKUMENTATION.md                       # Diese Datei
+├── PrezioHub_Anleitung.md                 # PrezioHub Bedienungsanleitung
 └── codemagic.yaml                         # CI/CD (Codemagic)
 ```
 
@@ -650,7 +812,7 @@ defaultRecordingInterval = 10.0 Sekunden
 
 ---
 
-## 9. Ablauf (End-to-End)
+## 11. Ablauf (End-to-End)
 
 ### Vorbereitung (einmalig)
 
@@ -722,7 +884,7 @@ defaultRecordingInterval = 10.0 Sekunden
 
 ---
 
-## 10. Fehlerbehebung
+## 12. Fehlerbehebung
 
 ### Recorder verbindet nicht
 
@@ -785,7 +947,7 @@ cat /home/pi/prezio_key.txt
 
 ---
 
-## 11. Branding & Logos
+## 13. Branding & Logos
 
 | Verwendung | Logo | Datei |
 |---|---|---|
@@ -815,7 +977,7 @@ Datum im PDF ist immer `DateTime.now()` (aktueller Zeitpunkt bei Erstellung). Di
 
 ---
 
-## 12. Cursor-Kontext (Prompt fuer neuen Chat)
+## 14. Cursor-Kontext (Prompt fuer neuen Chat)
 
 Kopiere folgendes in einen neuen Cursor-Chat um den vollen Kontext zu haben:
 
@@ -840,7 +1002,9 @@ Kopiere folgendes in einen neuen Cursor-Chat um den vollen Kontext zu haben:
 
 **Recorder:** `POST /wifi/off` schaltet WLAN 120s ab, dann automatisch wieder an – kein Power-Cycle noetig.
 
-**Wichtige Dateien:** Siehe `DOKUMENTATION.md` im Projektroot fuer die komplette Beschreibung aller Dateien, Services, Modelle, API-Endpunkte, Validierungslogik, Supabase-Setup und Hardware-Aufbau.
+**Windows-Tools:** PrezioHub (zentrale Steuerung), PrezioImager (SD-Karten flashen), PrezioRecorder (Windows-Sensor-Recorder), PrezioDummy (Mock-Server). Alle als .exe via Installer verteilbar (`prezio_hub/build_all.py` + `prezio_hub/prezio_installer.iss`). Kein Python beim Endbenutzer noetig.
+
+**Wichtige Dateien:** Siehe `DOKUMENTATION.md` im Projektroot fuer die komplette Beschreibung aller Dateien, Services, Modelle, API-Endpunkte, Validierungslogik, Supabase-Setup und Hardware-Aufbau. Siehe `PrezioHub_Anleitung.md` fuer die Bedienung des PrezioHub Dashboards.
 
 ---
 

@@ -1,121 +1,174 @@
-# Prezio V2 - Druckprotokoll App
+# Prezio v2 - Druckpruefungssystem
 
-Cross-Platform App (iOS & Android) zur Verarbeitung von Druckmessungen.
+**Soleco AG / Lehmann 2000, Zofingen**  
+**Stand:** Maerz 2026
 
-## Features
+Cross-Platform Druckpruefungssystem fuer die Sanitaerbranche. Bestehend aus einer Smartphone-App (iOS & Android), einem Raspberry Pi Recorder, Cloud-Speicher (Supabase) und Windows-Werkzeugen.
 
-- CSV-Dateien vom Raspberry Pi laden (via WiFi oder Dateiauswahl)
-- Messungen in Liste anzeigen
-- Messungen validieren (gültig/ungültig markieren)
-- Druckverlauf als Kurve visualisieren
-- Druckprotokoll automatisch generieren (PDF)
-- Unterschrift erfassen (Vollbild-Signaturfeld)
-- Protokoll per E-Mail versenden
+---
 
-## Architektur
+## Systemuebersicht
 
 ```
-lib/
-├── main.dart              # App-Einstiegspunkt
-├── app.dart               # MaterialApp-Konfiguration
-├── models/                # Datenmodelle
-│   ├── sample.dart        # Einzelner Messpunkt
-│   ├── measurement.dart   # Komplette Messung
-│   └── protocol_data.dart # Protokoll-Daten
-├── services/              # Business Logic
-│   ├── csv_parser_service.dart
-│   ├── pi_connection_service.dart
-│   ├── measurement_service.dart
-│   ├── pdf_generator_service.dart
-│   ├── email_service.dart
-│   └── storage_service.dart
-├── providers/             # Riverpod State Management
-├── screens/               # UI Screens
-│   ├── home_screen.dart
-│   ├── measurement_list_screen.dart
-│   ├── measurement_detail_screen.dart
-│   ├── protocol_form_screen.dart
-│   ├── signature_screen.dart
-│   ├── send_protocol_screen.dart
-│   └── settings_screen.dart
-├── widgets/               # Wiederverwendbare Widgets
-│   ├── measurement_card.dart
-│   └── pressure_chart.dart
-└── utils/                 # Hilfsfunktionen
-    ├── formatters.dart    # Rundung, Datumsformatierung
-    ├── constants.dart
-    └── theme.dart
+┌──────────────────────┐     WiFi AP (192.168.4.1)     ┌──────────────────────┐
+│   Prezio Recorder    │◄──────────────────────────────►│   iPhone / Android   │
+│   (Raspberry Pi)     │     HTTP REST API :8080        │   Flutter App        │
+│                      │                                │                      │
+│   - KELLER LEO5      │                                │   - Aufzeichnung     │
+│   - CSV-Speicherung  │                                │   - Auto-Validierung │
+│   - WiFi AP          │                                │   - PDF-Protokoll    │
+│   - Secret Key Auth  │                                │   - Supabase Upload  │
+└──────────┬───────────┘                                └──────────┬───────────┘
+           │ USB-Seriell                                           │ HTTPS
+      ┌────┴─────┐                                        ┌───────┴────────┐
+      │ KELLER   │                                        │ Supabase       │
+      │ LEO5     │                                        │ (DB + Storage) │
+      └──────────┘                                        └────────────────┘
 ```
 
-## CSV-Format
+## Komponenten
 
-Die App erwartet CSV-Dateien im folgenden Format:
+### Smartphone-App (Flutter)
 
-```csv
-No,Datetime [local time],Datetime [UTC],P1 [bar],TOB1 [°C],P1 rounded [bar],TOB1 rounded [°C]
-1,13.03.2026 15:37:23,2026-03-13T14:37:23.454963Z,-0.001094818,25.71664429,-0.00,25.72
-2,13.03.2026 15:37:24,2026-03-13T14:37:24.456390Z,-0.001752853,25.71664429,-0.00,25.72
-...
-```
+Die Haupt-App fuer Monteure. Verbindet sich per WiFi mit dem Prezio Recorder, steuert Aufzeichnungen, validiert Druckpruefungen automatisch (inkl. Wetterdaten-Korrektur), erstellt PDF-Protokolle mit Unterschrift und laedt alles nach Supabase hoch.
 
-## Raspberry Pi Verbindung
+- **Plattformen:** iOS, Android
+- **Framework:** Flutter (Dart), Riverpod
+- **Pfad:** `lib/`
 
-Die App kommuniziert mit dem Raspberry Pi über WiFi:
+### Prezio Recorder (Raspberry Pi)
 
-1. Der Pi erstellt ein eigenes WLAN-Netzwerk (Access Point)
-2. Das Handy verbindet sich mit diesem WLAN
-3. Die App lädt Dateien über HTTP vom Pi (Standard: `http://192.168.4.1:8080`)
+Headless Python-Script auf dem Pi. Liest den KELLER LEO5 Drucksensor per USB-Seriell aus, speichert CSV-Dateien und stellt eine HTTP REST API bereit.
 
-### Pi-Server Endpunkte
+- **Hardware:** Pi 4B oder Pi Zero 2 W
+- **Pfad:** `pi_recorder/`
 
-Der HTTP-Server auf dem Pi muss folgende Endpunkte bereitstellen:
+### PrezioHub (Windows)
 
-- `GET /health` - Health-Check
-- `GET /files` - Liste aller CSV-Dateien (JSON-Array)
-- `GET /files/{filename}` - Download einer spezifischen Datei
+Zentrale Steuerungsoberflaeche fuer Techniker und Entwickler. Buendelt alle Werkzeuge, Pi-Fernsteuerung, Supabase-Zugriff und Dokumentationen.
 
-## Entwicklung
+- **Framework:** Python / Tkinter
+- **Pfad:** `prezio_hub/`
 
-### Voraussetzungen
+### PrezioImager (Windows)
 
-- Flutter SDK 3.x
-- Dart 3.x
-- Android Studio / Xcode (für Emulator/Simulator)
+SD-Karten Flash Tool. Laedt das Raspberry Pi OS herunter und flasht es auf SD-Karten fuer neue Prezio Recorder. Benoetigt Admin-Rechte.
 
-### Setup
+- **Framework:** Python / Tkinter / Win32 API
+- **Pfad:** `pi_recorder/prezio_imager.py`
+
+### PC Recorder (Windows)
+
+Windows-Version des Sensor-Recorders mit grafischer Oberflaeche. Liest den KELLER LEO5 per COM-Port aus und stellt einen HTTP-Server bereit.
+
+- **Framework:** Python / Tkinter
+- **Pfad:** `pc_recorder/`
+
+### Dummy Server
+
+Mock-Server der den Raspberry Pi simuliert. Fuer Entwicklung und Tests ohne echten Sensor.
+
+- **Pfad:** `dummy_server/`
+
+### Supabase (Cloud)
+
+Kostenloser Cloud-Speicher fuer Protokolle und Rohdaten. Kein Login am Handy noetig, kein SDK - reine REST API.
+
+- **Dashboard:** https://supabase.com/dashboard/project/ndqisdqdhzeenvjkkuxd
+
+---
+
+## Installation (Windows-Werkzeuge)
+
+### Installer (empfohlen)
+
+`PrezioHub_Setup_1.0.0.exe` installiert alle Windows-Werkzeuge:
+
+- PrezioHub, PrezioImager, PrezioRecorder, PrezioDummy
+- Startmenue-Eintraege und optionale Desktop-Verknuepfungen
+- Kein Python noetig - alles ist als eigenstaendige .exe gebuendelt
+
+### Aus dem Quellcode
 
 ```bash
-cd prezio_v2
-flutter pub get
-flutter run
+# Einzelnes Tool starten
+cd prezio_v2/prezio_hub
+python prezio_hub.py
+
+# Alle .exe bauen
+python build_all.py
+
+# Installer erstellen (Inno Setup noetig)
+# prezio_installer.iss in Inno Setup oeffnen und kompilieren
 ```
+
+---
+
+## Smartphone-App
+
+### Features
+
+- CSV-Dateien vom Raspberry Pi laden (via WiFi)
+- Aufzeichnungen starten und stoppen
+- Messungen automatisch validieren (Gasgesetz, thermische Ausdehnung, Wetterdaten)
+- Druckverlauf als Kurve visualisieren
+- PDF-Protokoll mit Unterschrift generieren
+- Automatischer Upload nach Supabase
 
 ### Build
 
 ```bash
+flutter pub get
+flutter run
+
 # Android APK
 flutter build apk --release
 
-# iOS (auf Mac)
+# iOS (ueber Codemagic oder lokal mit Xcode)
 flutter build ios --release
 ```
 
-## Validierungslogik
+---
 
-Die Validierung ist aktuell als Dummy implementiert - der Benutzer wählt manuell, ob eine Messung gültig oder ungültig ist. Die automatische Validierungslogik kann später im `MeasurementValidationService` implementiert werden.
+## Dokumentation
 
-## Protokoll-Felder
+| Dokument | Beschreibung |
+|----------|-------------|
+| [Technische Dokumentation](DOKUMENTATION.md) | Vollstaendige Referenz aller Komponenten |
+| [App Store & Google Play](ANLEITUNG_APPSTORE_CONNECT_CODEMAGIC.md) | iOS/Android Signierung und Deployment |
+| [Pi Image klonen](ANLEITUNG_PI_KLONEN.md) | SD-Karte sichern und auf neue Pis flashen |
+| [PrezioHub Anleitung](PrezioHub_Anleitung.md) | Bedienung des PrezioHub Dashboards |
+| [Pi Recorder Setup](pi_recorder/howto.txt) | Ersteinrichtung eines neuen Raspberry Pi |
+| [PC Recorder](pc_recorder/README.md) | Windows-Sensor-Tool Handbuch |
+| [Dummy Server](dummy_server/README.md) | Mock-Server fuer Entwicklung |
 
-Das generierte PDF enthält:
+---
 
-- Projektinformationen (Objekt, Projekt, Verfasser)
-- Druckprüfung (Betriebsdruck, Prüfdruck, Prüfdauer)
-- Prüfart (Optisch, Lecksuchspray, Röntgenprüfung, Vakuumtest)
-- Resultat (Bestanden/Nicht bestanden)
-- Druckverlauf-Kurve
-- Messdaten-Zusammenfassung
-- Datum und Unterschrift des Monteurs
+## Projektstruktur
+
+```
+prezio_v2/
+├── lib/                    # Flutter-App (Smartphone)
+│   ├── models/             # Datenmodelle
+│   ├── screens/            # UI Screens
+│   ├── services/           # Business Logic
+│   ├── providers/          # Riverpod State Management
+│   ├── widgets/            # Wiederverwendbare Widgets
+│   └── utils/              # Hilfsfunktionen
+├── pi_recorder/            # Raspberry Pi Recorder + Imager
+├── pc_recorder/            # Windows PC Recorder
+├── dummy_server/           # Mock-Server
+├── prezio_hub/             # PrezioHub Dashboard + Build-Scripts
+├── assets/images/          # App-Logos (Kolibri, Lehmann 2000, Climartis)
+├── ios/                    # iOS-spezifisch
+├── android/                # Android-spezifisch
+├── DOKUMENTATION.md        # Vollstaendige technische Dokumentation
+├── PrezioHub_Anleitung.md  # PrezioHub Bedienungsanleitung
+└── pubspec.yaml            # Flutter-Abhaengigkeiten
+```
+
+---
 
 ## Lizenz
 
-Proprietär - Soleco AG
+Proprietaer - Soleco AG

@@ -96,3 +96,9 @@ pi_recorder/.flash_cache/
 pi_recorder/dist/
 pi_recorder/build/
 pi_recorder/*.spec
+
+# PrezioHub build artifacts
+prezio_hub/dist/
+prezio_hub/build/
+prezio_hub/installer_output/
+prezio_hub/*.spec

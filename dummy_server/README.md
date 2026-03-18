@@ -1,17 +1,19 @@
 # Prezio Dummy Server
 
-Dieser Server simuliert den Raspberry Pi für Entwicklung und Tests.
-
-## Voraussetzungen
-
-- Python 3.x (bereits auf den meisten Systemen installiert)
+Simuliert den Raspberry Pi Recorder fuer Entwicklung und Tests. Stellt die gleichen HTTP-Endpunkte wie der echte Recorder bereit, ohne dass ein Pi oder Sensor angeschlossen sein muss.
 
 ## Server starten
 
-### Option 1: Doppelklick
-Doppelklicke auf `start_server.bat`
+### Variante A: PrezioHub (empfohlen)
 
-### Option 2: Terminal
+Der Dummy Server ist im **PrezioHub Installer** enthalten (`PrezioHub_Setup_1.0.0.exe`). Starten ueber PrezioHub > Tools > Dummy Server, oder direkt `PrezioDummy.exe` ausfuehren. Kein Python noetig.
+
+### Variante B: Doppelklick
+
+Doppelklick auf `start_server.bat` (Python 3.x muss installiert sein).
+
+### Variante C: Terminal
+
 ```bash
 cd dummy_server
 python server.py
@@ -69,10 +71,15 @@ python server.py
 3. Port: 8080 (Standard)
 4. Teste mit "Verbindung testen"
 
-## Für den echten Raspberry Pi
+## Fuer den echten Raspberry Pi
 
 Der gleiche Python-Code kann auf dem Raspberry Pi laufen:
 1. Kopiere `server.py` auf den Pi
 2. Erstelle einen `data/` Ordner
 3. Starte mit `python3 server.py`
-4. Optional: Als Systemd-Service einrichten für Autostart
+4. Optional: Als Systemd-Service einrichten fuer Autostart
+
+## Siehe auch
+
+- [PrezioHub Anleitung](../PrezioHub_Anleitung.md) - Zentrale Steuerungsoberflaeche
+- [Technische Dokumentation](../DOKUMENTATION.md) - Vollstaendige Systemreferenz
