@@ -272,46 +272,72 @@ SENSOR_ADDRESS = 1         # Modbus-Adresse des Sensors
 | Gehaeuse (optional) | CHF 10 | 3D-Druck oder Standardgehaeuse |
 | **KELLER LEO5 Drucksensor** | vorhanden | USB-Seriell-Anschluss |
 
-### Schritt-fuer-Schritt Aufbau
+### Methode 1: PrezioImager (empfohlen - vollautomatisch)
 
-#### 1. SD-Karte vorbereiten
+Der PrezioImager flasht die SD-Karte und richtet den Pi komplett automatisch ein. Kein SSH, kein manuelles Setup, kein Terminal noetig.
+
+#### Ablauf
+
+1. **PrezioImager starten** (aus PrezioHub > Tools, oder direkt die .exe)
+   - Benoetigt Admin-Rechte (UAC-Dialog bestaetigen)
+   - PrezioImager laedt beim Start die neueste Firmware von GitHub (oder nutzt den Cache)
+2. **SD-Karte einlegen** und im PrezioImager auswaehlen
+   - **Achtung:** Alle Daten auf der Karte werden geloescht!
+3. **"Flash starten"** klicken
+   - Raspberry Pi OS wird automatisch heruntergeladen (beim ersten Mal, ~500 MB)
+   - Karte wird formatiert und geflasht
+   - `pi_recorder.py`, `setup_pi.sh`, `requirements.txt`, `howto.txt` und `pyserial` werden auf die Karte kopiert
+   - Ein Erststart-Script (`firstrun.sh`) wird erstellt
+4. **SD-Karte in den Pi einsetzen und Strom anschliessen**
+5. **3-5 Minuten warten** (der Pi durchlaeuft einen 2-Phasen-Boot, siehe unten)
+6. WiFi "Prezio-Recorder" sollte sichtbar sein
+
+#### 2-Phasen-Boot (was im Hintergrund passiert)
+
+| Phase | Was passiert | Dauer |
+|-------|-------------|-------|
+| **Phase 1** (erster Boot) | User `pi` wird erstellt, SSH aktiviert, Firmware-Dateien nach `/home/pi/prezio-v2/pi_recorder` kopiert, systemd-Service `prezio-setup` fuer Phase 2 erstellt, **dann automatischer Reboot** | ~60s |
+| **Phase 2** (zweiter Boot) | `prezio-setup.service` startet `setup_pi.sh`: WiFi-Country auf CH gesetzt, `rfkill unblock wifi`, NetworkManager wartet, WiFi AP "Prezio-Recorder" konfiguriert, Python venv + pyserial installiert, Recorder-Service installiert und gestartet. Service entfernt sich danach selbst. | ~60-120s |
+
+Der Pi ist nach Phase 2 komplett einsatzbereit. Es muss nichts manuell gemacht werden.
+
+#### Firmware-Cache im Imager
+
+- Der Imager versucht beim Start die neuesten Dateien von GitHub zu laden
+- Falls kein Internet: lokaler Cache wird genutzt (max. 24h alt)
+- Falls kein Internet UND Cache aelter als 24h: Fehlermeldung - Imager muss mit Internet gestartet werden
+- Cache-Pfad: `%LOCALAPPDATA%\PrezioHub\firmware_cache\`
+
+### Methode 2: Manuelle Einrichtung (Fallback)
+
+Falls der PrezioImager nicht verfuegbar ist oder etwas schief geht.
+
+#### 1. SD-Karte mit Raspberry Pi Imager vorbereiten
 
 1. **Raspberry Pi Imager** herunterladen: https://www.raspberrypi.com/software/
 2. Imager starten:
-   - **Geraet:** Raspberry Pi Zero 2 W
+   - **Geraet:** Raspberry Pi Zero 2 W (oder Pi 4)
    - **OS:** "Raspberry Pi OS Lite (64-bit)" (unter "Raspberry Pi OS (other)")
    - **Speicher:** 32 GB microSD
 3. **Vor dem Schreiben** → Zahnrad-Icon / "Einstellungen bearbeiten":
-   - Hostname: `prezio-pi`
+   - Hostname: `prezio-recorder`
    - SSH aktivieren: Ja, mit Passwort
    - Benutzername: `pi`
-   - Passwort: `Prezio2000!` (muss mit PrezioHub-Config uebereinstimmen)
+   - Passwort: `Prezio2000!`
    - **WLAN konfigurieren:** Dein Buero-/Heim-WiFi eintragen (fuer Ersteinrichtung!)
    - Zeitzone: `Europe/Zurich`
 4. "Schreiben" klicken und warten
 
-#### 2. Pi zusammenbauen
+#### 2. Ersteinrichtung per SSH
 
-1. microSD in den Pi Zero 2 W einsetzen
-2. USB-OTG-Adapter an den **Daten-Micro-USB** (nicht Power!) anschliessen
-3. USB-Seriell-Adapter mit KELLER LEO5 verbinden
-4. USB-Seriell-Adapter an den OTG-Adapter stecken
-5. Micro-USB-Netzteil an den **Power-Port** anschliessen
-
-**WICHTIG beim Pi Zero 2 W:** Es gibt zwei Micro-USB-Ports!
-- Links (aussen): **Power** (nur Strom)
-- Rechts (innen, neben HDMI): **Daten** (hier den OTG-Adapter anschliessen)
-
-#### 3. Ersteinrichtung per SSH
-
-1. Pi bootet (~60 Sekunden warten)
+1. SD-Karte in den Pi einsetzen, Strom anschliessen, ~60 Sekunden warten
 2. Auf dem PC (PowerShell):
 
 ```bash
-ssh pi@prezio-pi.local
+ssh pi@prezio-recorder.local
 ```
 
-Falls `prezio-pi.local` nicht gefunden wird: IP im Router nachschauen.
+Falls `prezio-recorder.local` nicht gefunden wird: IP im Router nachschauen.
 
 3. Software installieren:
 
@@ -329,16 +355,19 @@ sudo bash setup_pi.sh
 sudo reboot
 ```
 
-#### 4. Testen
+5. Testen: WiFi "Prezio-Recorder" suchen, verbinden (Passwort: `prezio2026`), im Browser `http://192.168.4.1:8080/health` oeffnen.
 
-1. Auf dem Handy: WiFi "Prezio-Recorder" suchen und verbinden (Passwort: `prezio2026`)
-2. Im Browser oeffnen: `http://192.168.4.1:8080/health`
-3. Sollte JSON mit Sensor-Status zeigen
-4. In der Prezio-App: Kolibri-Logo erscheint → Verbindung wird automatisch hergestellt
+### Pi zusammenbauen
 
-#### 5. Fertig!
+1. microSD in den Pi Zero 2 W einsetzen
+2. USB-OTG-Adapter an den **Daten-Micro-USB** (nicht Power!) anschliessen
+3. USB-Seriell-Adapter mit KELLER LEO5 verbinden
+4. USB-Seriell-Adapter an den OTG-Adapter stecken
+5. Micro-USB-Netzteil an den **Power-Port** anschliessen
 
-Ab jetzt: Pi mit Strom versorgen → bootet automatisch → WiFi AP startet → Sensor wird erkannt → App verbinden und arbeiten.
+**WICHTIG beim Pi Zero 2 W:** Es gibt zwei Micro-USB-Ports!
+- Links (aussen): **Power** (nur Strom)
+- Rechts (innen, neben HDMI): **Daten** (hier den OTG-Adapter anschliessen)
 
 ### Unterschiede Pi 4 B vs Pi Zero 2 W
 
@@ -351,9 +380,10 @@ Ab jetzt: Pi mit Strom versorgen → bootet automatisch → WiFi AP startet → 
 | Stromverbrauch | ~3-7W | ~1-2W |
 | Preis | ~CHF 50-80 | ~CHF 20 |
 | OTG-Adapter noetig? | Nein | Ja |
+| PrezioImager | Funktioniert | Funktioniert |
 | Setup-Skript | Identisch | Identisch |
 
-Das Setup-Skript (`setup_pi.sh`) funktioniert identisch auf beiden Modellen.
+Sowohl PrezioImager als auch `setup_pi.sh` funktionieren identisch auf beiden Modellen.
 
 ### Mehrere Geraete
 
@@ -361,7 +391,7 @@ Jedes Geraet ist unabhaengig. Bei mehreren Geraeten:
 - Jeder Pi hat die gleiche SSID ("Prezio-Recorder") und IP (192.168.4.1)
 - Das Handy verbindet sich immer nur mit dem Pi der gerade in Reichweite ist
 - Kein Konflikt, da nie zwei Pis gleichzeitig in Reichweite sein sollten
-- Falls doch: SSID anpassen mit `sudo bash setup_pi.sh "Prezio-Geraet-2"`
+- Falls doch: SSID anpassen per SSH mit `sudo bash setup_pi.sh "Prezio-Geraet-2"`
 
 ---
 
@@ -471,22 +501,44 @@ Das Buero greift ueber https://supabase.com/dashboard auf die Daten zu:
 
 ## 7. PrezioHub (Windows-Dashboard)
 
-PrezioHub ist die zentrale Steuerungsoberflaeche fuer Techniker und Entwickler. Es buendelt alle Werkzeuge, Fernsteuerung und Dokumentationen in einer Desktop-Anwendung.
+PrezioHub ist die zentrale Steuerungsoberflaeche fuer Techniker und Entwickler. Es buendelt alle Werkzeuge, Pi-Fernsteuerung, Firmware-Updates, Supabase-Zugriff und Dokumentationen in einer Desktop-Anwendung.
 
-### Funktionen
+### Tabs
 
 | Tab | Funktion |
 |-----|----------|
-| **Dashboard** | Live-Status des Raspberry Pi (Verbindung, Sensor, Service, WiFi) |
-| **SSH / Terminal** | PowerShell mit SSH-Verbindung zum Pi oeffnen |
+| **Dashboard** | Live-Status des Pi (Verbindung, Sensor, Live-Werte P1/TOB1). Oranges Banner bei veraltetem Pi. Rotes Banner bei fehlendem Internet/Cache. Auto-Refresh alle 5s. |
+| **Pi-Steuerung** | SSH oeffnen, Service neustarten, Pi rebooten, WiFi aus (120s), **Firmware-Update** (Pi-Version pruefen + per SFTP updaten), Service-Logs laden |
 | **Aufzeichnung** | Fernsteuerung: Aufzeichnung starten/stoppen, Status anzeigen |
 | **Tools** | PrezioImager, PC Recorder und Dummy Server starten |
-| **Supabase** | Cloud-Dashboard oeffnen, Rohdaten und Protokolle anzeigen |
+| **Supabase** | Protokoll-Ordner aus Supabase Storage laden, nach Datum sortiert (neueste oben), Dateien/Ordner als ZIP herunterladen |
 | **Dokumentation** | Alle Projekt-Dokumentationen oeffnen |
+
+### Firmware-Cache
+
+PrezioHub laedt beim Start automatisch folgende Dateien von GitHub (`main`-Branch) herunter:
+
+- `pi_recorder.py`
+- `setup_pi.sh`
+- `requirements.txt`
+- `howto.txt`
+
+Diese werden unter `%LOCALAPPDATA%\PrezioHub\firmware_cache\` gespeichert. Der Cache wird bei jedem Start mit Internet ueberschrieben. Ohne Internet wird der bestehende Cache verwendet (rotes Banner im Dashboard). Der Cache wird sowohl vom Hub (Pi-Updates per SFTP) als auch vom PrezioImager (SD-Karten flashen) genutzt.
+
+**GitHub-Quelle:** `https://raw.githubusercontent.com/someFisherman/prezio-v2/main/pi_recorder/`
+
+### Pi-Firmware-Update (Ablauf)
+
+1. Hub vergleicht `VERSION` der gecachten `pi_recorder.py` mit der Pi-Version (aus `/health`)
+2. Falls Pi veraltet: Oranges Banner "UPDATE FAELLIG" im Dashboard + "Jetzt updaten" Button in Pi-Steuerung
+3. Update per SFTP: Gecachte `pi_recorder.py` wird auf den Pi hochgeladen (`/home/pi/prezio-v2/pi_recorder/`)
+4. Service `prezio-recorder` wird per SSH neugestartet
+5. **Kein Internet auf dem Pi noetig** - alles geht ueber das Pi-WiFi
 
 ### Technik
 
 - **Framework:** Python 3 / Tkinter
+- **SSH/SFTP:** paramiko (im Hub eingebaut)
 - **Kommunikation:** HTTP REST API zum Pi (Port 8080)
 - **Netzwerk:** PC muss mit WiFi "Prezio-Recorder" verbunden sein
 - **Quellcode:** `prezio_hub/prezio_hub.py`
@@ -495,8 +547,8 @@ PrezioHub ist die zentrale Steuerungsoberflaeche fuer Techniker und Entwickler. 
 
 | Executable | Beschreibung | Admin noetig? |
 |-----------|-------------|---------------|
-| `PrezioHub.exe` | Zentrale Steuerung | Nein |
-| `PrezioImager.exe` | SD-Karten Flash Tool | Ja (UAC) |
+| `PrezioHub.exe` | Zentrale Steuerung + Firmware-Updates | Nein |
+| `PrezioImager.exe` | SD-Karten Flash Tool (vollautomatisch) | Ja (UAC) |
 | `PrezioRecorder.exe` | Windows-Sensor-Recorder | Nein |
 | `PrezioDummy.exe` | Mock-Server (Konsolenfenster) | Nein |
 
@@ -512,7 +564,7 @@ Alle Windows-Werkzeuge werden als eigenstaendige `.exe`-Dateien mit PyInstaller 
 
 ```
 1. python build_all.py          → Baut alle 4 .exe + kopiert Dokumentation
-2. Inno Setup kompilieren       → Erzeugt PrezioHub_Setup_1.0.0.exe
+2. Inno Setup kompilieren       → Erzeugt PrezioHub_Setup_X.X.X.exe
 ```
 
 ### Distribution bauen
@@ -531,7 +583,7 @@ Erzeugt `dist/PrezioHub/` mit:
 1. **Inno Setup** installieren: https://jrsoftware.org/isdl.php
 2. `prezio_hub/prezio_installer.iss` oeffnen
 3. "Compile" klicken
-4. Ergebnis: `installer_output/PrezioHub_Setup_1.0.0.exe`
+4. Ergebnis: `installer_output/PrezioHub_Setup_X.X.X.exe`
 
 ### Was der Installer macht
 
@@ -543,67 +595,49 @@ Erzeugt `dist/PrezioHub/` mit:
 
 ### Versionierung
 
-Alle Komponenten haben eine `VERSION` Konstante:
-
 | Datei | Konstante | Verwendung |
 |-------|-----------|------------|
-| `prezio_hub/prezio_hub.py` | `VERSION = "1.0.0"` | Hub Auto-Update-Check |
-| `pi_recorder/pi_recorder.py` | `VERSION = "1.0.0"` | Pi-Firmware-Update, wird ueber `/health` zurueckgegeben |
-| `pi_recorder/prezio_imager.py` | `VERSION = "1.0.0"` | Fuer spaetere Nutzung |
-| `prezio_hub/version_info.py` | `filevers=(1,0,0,0)` | Windows-Dateiinfos der EXE |
-| `prezio_hub/prezio_installer.iss` | `MyAppVersion "1.0.0"` | Installer-Versionsnummer |
+| `pi_recorder/pi_recorder.py` | `VERSION = "1.1.0"` | Pi-Firmware-Version, wird ueber `/health` zurueckgegeben |
+| `prezio_hub/prezio_hub.py` | `VERSION = "1.1.0"` | Nur informativ (kein Auto-Update fuer Hub) |
+| `pi_recorder/prezio_imager.py` | `VERSION = "1.1.0"` | Nur informativ |
+| `prezio_hub/version_info.py` | `filevers=(1,1,0,0)` | Windows-Dateiinfos der EXE |
+| `prezio_hub/prezio_installer.iss` | `MyAppVersion "1.1.0"` | Installer-Versionsnummer |
 
-Die Version muss zum GitHub Release Tag passen: Tag `v1.0.1` = VERSION `"1.0.1"`.
+**Wichtig:** Nur die `VERSION` in `pi_recorder.py` ist relevant fuer das Update-System. Der Hub liest diese aus der gecachten Datei und vergleicht sie mit der Version auf dem Pi.
 
 ### Update-System
 
-PrezioHub hat ein eingebautes Update-System basierend auf GitHub Releases.
+Das Update-System ist bewusst einfach gehalten:
 
-**GitHub API Endpoint:** `GET https://api.github.com/repos/someFisherman/prezio-v2/releases/latest`
+#### Pi-Firmware-Update (automatisch)
 
-#### Hub Auto-Update (beim Start)
+Der Hub und der Imager ziehen `pi_recorder.py`, `setup_pi.sh`, `requirements.txt` und `howto.txt` direkt vom `main`-Branch auf GitHub. **Kein GitHub Release noetig**, ein einfacher `git push` genuegt.
 
-1. PrezioHub startet → Hintergrund-Thread prueft GitHub API
-2. Vergleicht eigene `VERSION` mit dem `tag_name` des neuesten Releases
-3. Falls neuer: Gruener Banner oben im Fenster mit "Jetzt herunterladen"
-4. Klick sucht in den Release-Assets nach einer `*Setup*.exe`
-5. Download → Speichern → optional Installer starten und Hub schliessen
+**Ablauf fuer Entwickler:**
+1. `pi_recorder.py` aendern (z.B. Bugfix, neue Funktion)
+2. `VERSION = "1.2.0"` in `pi_recorder.py` hochsetzen
+3. `git add . && git commit -m "Pi Recorder v1.2.0" && git push`
+4. Fertig - beim naechsten Start von Hub/Imager wird die neue Version gecacht
 
-Kein stilles Auto-Update - der Benutzer entscheidet immer selbst.
+**Ablauf fuer Techniker (Pi updaten):**
+1. PrezioHub mit Internet starten (Firmware-Cache wird aktualisiert)
+2. Mit WiFi "Prezio-Recorder" verbinden
+3. Dashboard zeigt oranges Banner "UPDATE FAELLIG: Pi vX.X.X → vY.Y.Y"
+4. In Tab "Pi-Steuerung" → "Jetzt updaten" klicken
+5. Gecachte `pi_recorder.py` wird per SFTP auf den Pi hochgeladen
+6. Service wird automatisch neugestartet
 
-#### Pi-Firmware-Update (Tab "Pi-Steuerung")
+**Ablauf fuer neue SD-Karten:**
+- PrezioImager verwendet automatisch die gecachte Firmware
+- Falls kein Internet: Cache wird genutzt (max. 24h alt, sonst Fehlermeldung)
 
-1. Button "Pi-Firmware pruefen" fragt `GET /health` vom Pi → `version` Feld
-2. Gleichzeitig: GitHub API → neuestes Release Tag
-3. Versionsvergleich (Semver Tuple-Vergleich)
-4. Falls neuer: Changelog + "Jetzt updaten" Button
-5. Update-Ablauf:
-   a. Download des Release-ZIP von `https://github.com/{repo}/archive/refs/tags/{tag}.zip`
-   b. Entpacken, `pi_recorder/pi_recorder.py` extrahieren
-   c. SFTP-Upload auf den Pi nach `/home/pi/prezio-v2/pi_recorder/pi_recorder.py`
-   d. SSH: `sudo systemctl restart prezio-recorder`
-   e. Bestaetigung oder Fehlermeldung anzeigen
+#### Hub / Recorder / Dummy (manuell)
 
-**Technische Details:**
-- SFTP und SSH laufen ueber `paramiko` (im Hub gebundelt)
-- Temporaere Dateien werden nach dem Upload automatisch geloescht
-- Der Pi braucht kein Internet - der Hub laedt das Update und schiebt es per SFTP
-
-### Neues Release erstellen
-
-```
-1. Code aendern, VERSION erhoehen in allen betroffenen Dateien
-2. git commit + git push
-3. python build_all.py
-4. Inno Setup kompilieren → PrezioHub_Setup_X.Y.Z.exe
-5. GitHub Release erstellen:
-   - Tag: vX.Y.Z  (muss zu VERSION passen!)
-   - Beschreibung/Changelog eintragen
-   - Asset: PrezioHub_Setup_X.Y.Z.exe hochladen
-   - Publish
-```
-
-**Wichtig:** Ein `git push` allein genuegt nicht. Der Hub prueft ausschliesslich GitHub Releases, nicht Commits.
+Diese Programme haben kein Auto-Update. Neues Update verteilen:
+1. Code aendern, `VERSION` erhoehen
+2. `python build_all.py`
+3. Inno Setup kompilieren
+4. Installer manuell verteilen
 
 ---
 
@@ -890,10 +924,22 @@ defaultRecordingInterval = 10.0 Sekunden
 
 | Problem | Loesung |
 |---|---|
-| WiFi "Prezio-Recorder" nicht sichtbar | Recorder Strom pruefen, 60s warten |
+| WiFi "Prezio-Recorder" nicht sichtbar (neuer Pi) | 3-5 Minuten warten (2-Phasen-Boot) |
+| WiFi "Prezio-Recorder" nicht sichtbar (bestehender Pi) | Recorder Strom pruefen, 60s warten |
 | WiFi sichtbar, aber keine Verbindung | Passwort: `prezio2026` |
-| Verbunden, aber App zeigt "Verbinde..." | `setup_pi.sh` nochmal ausfuehren |
-| SSH: "HOST IDENTIFICATION HAS CHANGED" | `ssh-keygen -R 192.168.4.1` |
+| Verbunden, aber App zeigt "Verbinde..." | Per SSH pruefen: `sudo systemctl status prezio-recorder` |
+| SSH: "HOST IDENTIFICATION HAS CHANGED" | `ssh-keygen -R 192.168.4.1` oder `ssh-keygen -R prezio-recorder.local` |
+| SSH: "Permission denied" | User: `pi`, Passwort: `Prezio2000!` |
+
+### PrezioHub / Firmware
+
+| Problem | Loesung |
+|---|---|
+| "Kein Internet - Firmware-Cache nicht aktualisiert" | Hub einmal mit Internet starten |
+| "Kein Internet und kein Firmware-Cache" | Hub muss zuerst einmal mit Internet gestartet werden |
+| Dashboard zeigt "UPDATE FAELLIG" | In Pi-Steuerung → "Jetzt updaten" klicken |
+| Imager: "Cache aelter als 24 Stunden" | Imager mit Internet starten |
+| Imager: "Keine Firmware verfuegbar" | Hub oder Imager einmal mit Internet starten |
 
 ### Sensor
 
@@ -1002,7 +1048,9 @@ Kopiere folgendes in einen neuen Cursor-Chat um den vollen Kontext zu haben:
 
 **Recorder:** `POST /wifi/off` schaltet WLAN 120s ab, dann automatisch wieder an – kein Power-Cycle noetig.
 
-**Windows-Tools:** PrezioHub (zentrale Steuerung), PrezioImager (SD-Karten flashen), PrezioRecorder (Windows-Sensor-Recorder), PrezioDummy (Mock-Server). Alle als .exe via Installer verteilbar (`prezio_hub/build_all.py` + `prezio_hub/prezio_installer.iss`). Kein Python beim Endbenutzer noetig.
+**Windows-Tools:** PrezioHub (zentrale Steuerung + Firmware-Updates), PrezioImager (SD-Karten flashen, vollautomatisch mit 2-Phasen-Boot), PrezioRecorder (Windows-Sensor-Recorder), PrezioDummy (Mock-Server). Alle als .exe via Installer verteilbar (`prezio_hub/build_all.py` + `prezio_hub/prezio_installer.iss`). Kein Python beim Endbenutzer noetig.
+
+**Update-System:** Pi-Firmware (`pi_recorder.py`) wird direkt vom `main`-Branch auf GitHub gezogen (kein Release noetig). Hub cached die Dateien beim Start unter `%LOCALAPPDATA%\PrezioHub\firmware_cache\`. Updates werden per SFTP auf den Pi geschoben (kein Internet auf dem Pi noetig). Hub/Recorder/Dummy haben kein Auto-Update - neue .exe manuell verteilen.
 
 **Wichtige Dateien:** Siehe `DOKUMENTATION.md` im Projektroot fuer die komplette Beschreibung aller Dateien, Services, Modelle, API-Endpunkte, Validierungslogik, Supabase-Setup und Hardware-Aufbau. Siehe `PrezioHub_Anleitung.md` fuer die Bedienung des PrezioHub Dashboards.
 

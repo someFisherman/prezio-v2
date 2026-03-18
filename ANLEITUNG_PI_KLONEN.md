@@ -1,50 +1,73 @@
 # Prezio Recorder - SD-Karte vorbereiten & klonen
 
 **Stand:** Maerz 2026  
-**Ziel:** Einen neuen Prezio Recorder (Raspberry Pi Zero 2 W) in Betrieb nehmen oder einen bestehenden klonen.
+**Ziel:** Einen neuen Prezio Recorder (Raspberry Pi Zero 2 W oder Pi 4B) in Betrieb nehmen oder einen bestehenden klonen.
 
 ---
 
-## Methode 1: PrezioImager (empfohlen)
+## Methode 1: PrezioImager (empfohlen - vollautomatisch)
 
-Der **PrezioImager** ist das einfachste Werkzeug um neue SD-Karten fuer Prezio Recorder vorzubereiten. Er ist im PrezioHub Installer enthalten.
+Der **PrezioImager** ist das einfachste Werkzeug um neue SD-Karten fuer Prezio Recorder vorzubereiten. Er ist im PrezioHub Installer enthalten. Die gesamte Einrichtung (WiFi AP, SSH, Recorder-Service) passiert automatisch - man muss nur die Karte flashen und den Pi einschalten.
 
 ### Voraussetzungen
 
 - Windows-PC mit SD-Kartenleser
 - Leere microSD-Karte (mind. 16 GB, empfohlen 32 GB)
 - PrezioHub installiert (oder PrezioImager.exe direkt)
+- **Internetverbindung** (zum Herunterladen des OS-Images beim ersten Mal und fuer die Firmware)
 
 ### Schritt fuer Schritt
 
 1. **PrezioImager starten** (aus PrezioHub > Tools > PrezioImager, oder direkt die .exe)
    - Benoetigt Admin-Rechte (UAC-Dialog bestaetigen)
+   - Der Imager laedt automatisch die neueste Firmware von GitHub
+   - Falls kein Internet: lokaler Cache wird genutzt (max. 24h alt)
 
 2. **SD-Karte einlegen** und im PrezioImager auswaehlen
    - PrezioImager erkennt verfuegbare SD-Karten automatisch
-   - **Achtung:** Alle Daten auf der Karte werden geloescht!
+   - **Achtung:** Alle Daten auf der Karte werden unwiderruflich geloescht!
 
 3. **"Flash starten"** klicken
-   - PrezioImager laedt das Raspberry Pi OS automatisch herunter (beim ersten Mal)
-   - Bereitet die Karte vor (Partitionen, Dateisystem)
-   - Flasht das Image auf die Karte
-   - Richtet SSH, WiFi AP und den Prezio Service automatisch ein
+   - PrezioImager laedt das Raspberry Pi OS Lite (64-bit) automatisch herunter (ca. 500 MB, nur beim ersten Mal)
+   - Formatiert und flasht die SD-Karte
+   - Kopiert die Firmware-Dateien auf die Karte (`pi_recorder.py`, `setup_pi.sh`, `requirements.txt`, `howto.txt`, `pyserial`)
+   - Erstellt ein Erststart-Script (`firstrun.sh`) fuer den automatischen Setup
 
-4. **SD-Karte einlegen und Pi starten**
-   - microSD in den Pi Zero 2 W einsetzen
-   - KELLER LEO5 per USB-OTG anschliessen
+4. **SD-Karte in den Pi einsetzen und Strom anschliessen**
+   - KELLER LEO5 per USB-OTG (Pi Zero) oder USB-A (Pi 4) anschliessen
    - Strom anschliessen
-   - ~60 Sekunden warten
-   - WiFi "Prezio-Recorder" sollte sichtbar sein
 
-5. **Testen**
-   - Handy mit "Prezio-Recorder" WiFi verbinden (Passwort: `prezio2026`)
+5. **3-5 Minuten warten** (wichtig! Nicht zu frueh abschalten!)
+   - Der Pi durchlaeuft einen automatischen 2-Phasen-Boot:
+
+   | Phase | Was passiert |
+   |-------|-------------|
+   | **Phase 1** (erster Boot, ~60s) | User `pi` wird erstellt, SSH aktiviert, Firmware-Dateien kopiert, Setup-Service fuer Phase 2 erstellt, **automatischer Reboot** |
+   | **Phase 2** (zweiter Boot, ~60-120s) | WiFi-Country auf CH gesetzt, WiFi freigeschaltet, NetworkManager gewartet, WiFi AP "Prezio-Recorder" konfiguriert, Python + pyserial installiert, Recorder-Service installiert und gestartet |
+
+6. **WiFi "Prezio-Recorder" sollte sichtbar sein**
+   - Passwort: `prezio2026`
+   - Pi-IP: `192.168.4.1`
+
+7. **Testen**
+   - Handy/PC mit "Prezio-Recorder" WiFi verbinden
    - Im Browser: `http://192.168.4.1:8080/health`
    - Sollte JSON mit Sensorstatus zeigen
+   - In der Prezio-App: Automatische Verbindung
 
 ### Dauer
 
 Komplett ca. **10-15 Minuten** (inkl. Download beim ersten Mal).
+
+### Firmware-Cache
+
+Der PrezioImager verwendet denselben Firmware-Cache wie der PrezioHub:
+- **Pfad:** `%LOCALAPPDATA%\PrezioHub\firmware_cache\`
+- **Mit Internet:** Immer die neueste Version von GitHub geladen
+- **Ohne Internet:** Lokaler Cache wird genutzt, sofern weniger als 24 Stunden alt
+- **Ohne Internet + Cache aelter als 24h:** Fehlermeldung - bitte mit Internet starten
+
+**Tipp:** PrezioHub einmal mit Internet starten, bevor man den Imager verwendet. Dann ist der Cache immer aktuell.
 
 ---
 
@@ -115,6 +138,43 @@ Ergebnis: statt 32 GB eine komprimierte `.img.gz` von ca. 1-3 GB.
 
 ---
 
+## Methode 3: Manuelle Einrichtung (Fallback)
+
+Falls weder PrezioImager noch ein bestehendes Image verfuegbar ist. Erfordert SSH-Zugang und Internetzugang auf dem Pi.
+
+### Ablauf
+
+1. **SD-Karte** mit dem offiziellen Raspberry Pi Imager flashen:
+   - OS: Raspberry Pi OS Lite (64-bit)
+   - Hostname: `prezio-recorder`
+   - SSH aktivieren, User: `pi`, Passwort: `Prezio2000!`
+   - **WiFi: Buero-/Heim-WLAN eintragen** (fuer Ersteinrichtung mit Internet)
+
+2. **Pi starten** und per SSH verbinden:
+   ```bash
+   ssh pi@prezio-recorder.local
+   ```
+
+3. **Software installieren:**
+   ```bash
+   sudo apt update && sudo apt install -y git python3-pip python3-venv
+   cd /home/pi
+   git clone https://github.com/someFisherman/prezio-v2.git
+   cd prezio-v2/pi_recorder
+   sudo bash setup_pi.sh
+   ```
+
+4. **Neustart:**
+   ```bash
+   sudo reboot
+   ```
+
+5. **Testen:** WiFi "Prezio-Recorder" suchen, verbinden, `http://192.168.4.1:8080/health` pruefen.
+
+Ab jetzt hat der Pi sein eigenes WiFi und braucht kein Buero-WLAN mehr.
+
+---
+
 ## Hardware-Info: Pi Zero 2 W
 
 ### Einkaufsliste
@@ -156,22 +216,39 @@ Ergebnis: statt 32 GB eine komprimierte `.img.gz` von ca. 1-3 GB.
 
 ### Alle Klone sind identisch
 
-Jeder Klon hat dieselbe SSID ("Prezio-Recorder"), denselben Key und dieselbe IP (192.168.4.1). Das ist kein Problem, solange nicht zwei Recorder gleichzeitig am selben Ort eingeschaltet sind.
+Jeder geklonte/geflashte Pi hat dieselbe SSID ("Prezio-Recorder"), denselben Key und dieselbe IP (192.168.4.1). Das ist kein Problem, solange nicht zwei Recorder gleichzeitig am selben Ort eingeschaltet sind.
 
-### Image-Versionierung
+### Pi-Firmware aktuell halten
 
+Wenn eine neue Version von `pi_recorder.py` verfuegbar ist:
+1. PrezioHub mit Internet starten (Cache wird aktualisiert)
+2. Mit Pi-WiFi verbinden
+3. Dashboard zeigt oranges Banner "UPDATE FAELLIG"
+4. In Pi-Steuerung → "Jetzt updaten" klicken
+5. Fertig - kein Neufashen der SD-Karte noetig
+
+### SSH-Zugang nach dem Flashen
+
+Falls du nach dem Flashen per SSH auf den Pi zugreifen willst:
+
+```bash
+# Mit dem Pi-WiFi "Prezio-Recorder" verbinden, dann:
+ssh pi@192.168.4.1
+# Passwort: Prezio2000!
+
+# Falls "HOST IDENTIFICATION HAS CHANGED" Fehler:
+ssh-keygen -R 192.168.4.1
+ssh-keygen -R prezio-recorder.local
 ```
-prezio_recorder_v1.img.gz    (Erstversion)
-prezio_recorder_v2.img.gz    (nach Update)
-```
 
-### Checkliste vor dem Image-Erstellen
+### Fehlerbehebung: WiFi erscheint nicht
 
-- [ ] WiFi AP startet automatisch ("Prezio-Recorder", 192.168.4.1)
-- [ ] `prezio-recorder.service` startet automatisch
-- [ ] Auth-Key wird korrekt ausgeliefert
-- [ ] Aufzeichnung starten/stoppen funktioniert
-- [ ] Keine persoenlichen Daten oder Test-Messungen auf der Karte
+| Problem | Loesung |
+|---------|---------|
+| WiFi nach 5 Min. nicht sichtbar | Pi per Ethernet anschliessen, per SSH Logs pruefen |
+| Logs pruefen | `ssh pi@prezio-recorder.local` dann `cat /var/log/prezio-firstboot.log` |
+| Setup-Service Status | `sudo systemctl status prezio-setup.service` |
+| Manuell ausfuehren | `cd /home/pi/prezio-v2/pi_recorder && sudo bash setup_pi.sh` |
 
 ---
 
