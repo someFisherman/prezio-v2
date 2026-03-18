@@ -16,6 +16,7 @@ API Endpoints:
   POST /recording/start   - Start recording
   POST /recording/stop    - Stop recording
   GET  /recording/status  - Current recording status
+  POST /time/sync         - Sync system clock from client timestamp
   POST /wifi/off          - Turn off WiFi AP for 120s, then auto-restart
   POST /reboot            - Reboot the Prezio Recorder
 """
@@ -41,6 +42,8 @@ import serial.tools.list_ports
 # ============================================================
 # Configuration
 # ============================================================
+
+VERSION = "1.0.0"
 
 DATA_DIR = Path(__file__).parent / "data"
 KEY_FILE = Path("/home/pi/prezio_key.txt")
@@ -442,15 +445,33 @@ class PrezioRecorder:
             except Exception as e:
                 _log(f"Error removing file: {e}")
 
+    def read_live(self) -> None:
+        """On-demand single sensor read (updates last_p1/last_tob1)."""
+        if not self.sensor_connected:
+            return
+        try:
+            p1, _ = self.client.read_channel_float(SENSOR_ADDRESS, 1)
+            tob1, _ = self.client.read_channel_float(SENSOR_ADDRESS, 4)
+            with self.lock:
+                self.last_p1 = round(p1, 4)
+                self.last_tob1 = round(tob1, 2)
+        except Exception:
+            pass
+
     def get_health(self) -> dict:
+        if not self.active_recording:
+            self.read_live()
         return {
             "status": "ok",
             "server": "Prezio Recorder",
+            "version": VERSION,
             "sensor_connected": self.sensor_connected,
             "serial_number": self.serial_number,
             "sensor_port": self._sensor_port,
             "recording": self.active_recording is not None,
             "timestamp": datetime.now().isoformat(),
+            "last_p1": self.last_p1,
+            "last_tob1": self.last_tob1,
         }
 
     def shutdown(self) -> None:
@@ -590,15 +611,44 @@ class PrezioHTTPHandler(http.server.BaseHTTPRequestHandler):
             self._send_json(result, status)
             return
 
+        if path == "/time/sync":
+            try:
+                body = json.loads(self._read_body() or b"{}")
+            except json.JSONDecodeError:
+                self._send_json({"error": "Invalid JSON"}, 400)
+                return
+            ts = body.get("timestamp") or body.get("iso") or body.get("time")
+            if not ts:
+                self._send_json({"error": "Field 'timestamp' required (ISO 8601)"}, 400)
+                return
+            try:
+                parsed = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                date_str = parsed.strftime("%Y-%m-%d %H:%M:%S")
+                result = subprocess.run(
+                    ["sudo", "date", "-s", date_str],
+                    capture_output=True, text=True, timeout=5)
+                if result.returncode == 0:
+                    _log(f"System clock synced to {date_str} via API")
+                    self._send_json({
+                        "status": "synced",
+                        "system_time": datetime.now().isoformat(),
+                        "source": date_str,
+                    })
+                else:
+                    self._send_json({"error": result.stderr.strip()}, 500)
+            except Exception as e:
+                self._send_json({"error": f"Invalid timestamp: {e}"}, 400)
+            return
+
         if path == "/wifi/off":
             WIFI_PAUSE_SECONDS = 120
             self._send_json({"status": "wifi_off", "restart_in_seconds": WIFI_PAUSE_SECONDS})
-            _log("WiFi-off requested via API – will restart in %ds", WIFI_PAUSE_SECONDS)
+            _log(f"WiFi-off requested via API – will restart in {WIFI_PAUSE_SECONDS}s")
             def _cycle_wifi():
                 time.sleep(2)
                 subprocess.run(["sudo", "systemctl", "stop", "hostapd"], check=False)
                 subprocess.run(["sudo", "ip", "link", "set", "wlan0", "down"], check=False)
-                _log("WiFi AP stopped. Waiting %ds before restart…", WIFI_PAUSE_SECONDS)
+                _log(f"WiFi AP stopped. Waiting {WIFI_PAUSE_SECONDS}s before restart…")
                 time.sleep(WIFI_PAUSE_SECONDS)
                 subprocess.run(["sudo", "ip", "link", "set", "wlan0", "up"], check=False)
                 subprocess.run(["sudo", "systemctl", "start", "hostapd"], check=False)

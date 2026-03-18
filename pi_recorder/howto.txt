@@ -13,7 +13,7 @@ Bevor du auf "Schreiben" klickst: Auf das Zahnrad-Icon / "Einstellungen bearbeit
 Hostname: prezio-pi
 SSH aktivieren: Ja, mit Passwort-Authentifizierung
 Benutzername: pi
-Passwort: Ein sicheres Passwort setzen (z.B. Prezio2026!)
+Passwort: Prezio2000! (muss mit PrezioHub-Config uebereinstimmen)
 WLAN konfigurieren: Dein normales Heim-/Buero-WiFi eintragen (damit du erstmal drauf kommst fuer die Ersteinrichtung!)
 Land/Zeitzone: CH / Europe/Zurich
 Schreiben klicken, warten bis fertig.
