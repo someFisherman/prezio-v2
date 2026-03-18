@@ -76,6 +76,11 @@ fi
 # ------ WiFi Access Point via NetworkManager ------
 echo "[3/5] Configuring WiFi Access Point (NetworkManager)..."
 
+echo "  Setting WiFi country code (CH)..."
+raspi-config nonint do_wifi_country CH 2>/dev/null || true
+rfkill unblock wifi 2>/dev/null || true
+sleep 2
+
 echo "  Waiting for NetworkManager..."
 for i in $(seq 1 30); do
     if nmcli general status >/dev/null 2>&1; then
