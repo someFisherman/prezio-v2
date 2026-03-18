@@ -15,7 +15,6 @@ import tempfile
 import threading
 import time
 import tkinter as tk
-import zipfile
 from tkinter import ttk, messagebox
 from urllib.request import urlopen, Request
 
@@ -23,8 +22,8 @@ from urllib.request import urlopen, Request
 # Config
 # ============================================================
 VERSION = "1.1.0"
-GITHUB_REPO = "someFisherman/prezio-v2"
-GITHUB_API  = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+GITHUB_RAW  = "https://raw.githubusercontent.com/someFisherman/prezio-v2/main/pi_recorder"
+GITHUB_FW_FILES = ["pi_recorder.py", "setup_pi.sh", "requirements.txt", "howto.txt"]
 
 PI_OS_URL = "https://downloads.raspberrypi.org/raspios_lite_arm64/images/raspios_lite_arm64-2025-05-13/2025-05-13-raspios-bookworm-arm64-lite.img.xz"
 PI_OS_XZ = "2025-05-13-raspios-bookworm-arm64-lite.img.xz"
@@ -264,7 +263,16 @@ sed -i "s/127.0.1.1.*/127.0.1.1\\t{PI_HOSTNAME}/" /etc/hosts
 systemctl enable ssh
 systemctl start ssh
 
-sleep 5
+echo "Waiting for NetworkManager to be ready..."
+for i in $(seq 1 60); do
+    if systemctl is-active --quiet NetworkManager 2>/dev/null; then
+        echo "NetworkManager ready after ${{i}}s"
+        break
+    fi
+    sleep 1
+done
+
+sleep 3
 
 SRC=/boot/firmware/prezio_setup
 DST=/home/{PI_USER}/prezio-v2/pi_recorder
@@ -759,81 +767,46 @@ class PrezioImager(tk.Tk):
                     f.write((cmdline + "\n").encode("utf-8"))
 
     def _get_firmware_files(self):
-        """Get pi_recorder files: cache -> GitHub -> error. Returns dict of filename->path."""
+        """Always pull latest from GitHub, fall back to cache, error if neither."""
         cache_dir = os.path.join(
             os.environ.get("LOCALAPPDATA", os.path.expanduser("~")),
             "PrezioHub", "firmware_cache")
+        os.makedirs(cache_dir, exist_ok=True)
+
+        needed = GITHUB_FW_FILES
         result = {}
 
-        needed = ["pi_recorder.py", "setup_pi.sh", "requirements.txt", "howto.txt"]
-        if os.path.exists(os.path.join(cache_dir, "pi_recorder.py")):
-            tag = ""
-            tag_file = os.path.join(cache_dir, "release_tag.txt")
-            if os.path.exists(tag_file):
-                with open(tag_file, "r") as f:
-                    tag = f.read().strip()
-            for fname in needed:
-                path = os.path.join(cache_dir, fname)
-                if os.path.exists(path):
-                    result[fname] = path
-            if result:
-                self._set_status(f"Firmware aus Cache ({tag})...")
-                return result
-
-        self._set_status("Lade neusten Release von GitHub...")
+        self._set_status("Lade neueste Firmware von GitHub...")
         try:
-            req = Request(GITHUB_API, headers={
-                "User-Agent": "PrezioImager/1.0",
-                "Accept": "application/vnd.github+json",
-            })
-            with urlopen(req, timeout=10) as resp:
-                release = json.loads(resp.read().decode())
+            for fname in needed:
+                url = f"{GITHUB_RAW}/{fname}"
+                req = Request(url, headers={"User-Agent": "PrezioImager/1.0"})
+                with urlopen(req, timeout=15) as resp:
+                    data = resp.read()
+                out_path = os.path.join(cache_dir, fname)
+                with open(out_path, "wb") as f:
+                    f.write(data)
+                result[fname] = out_path
+            self._set_status(f"{len(result)} Firmware-Dateien von GitHub geladen")
+            return result
+        except Exception:
+            pass
 
-            tag = release.get("tag_name", "")
-            self._set_status(f"GitHub Release {tag} gefunden, lade Dateien...")
+        self._set_status("Kein Internet - pruefe lokalen Cache...")
+        for fname in needed:
+            path = os.path.join(cache_dir, fname)
+            if os.path.exists(path):
+                result[fname] = path
 
-            zip_url = f"https://github.com/{GITHUB_REPO}/archive/refs/tags/{tag}.zip"
-            req = Request(zip_url, headers={"User-Agent": "PrezioImager/1.0"})
-            with urlopen(req, timeout=30) as resp:
-                zip_data = resp.read()
+        if "pi_recorder.py" in result:
+            self._set_status(f"Firmware aus Cache ({len(result)} Dateien)")
+            return result
 
-            os.makedirs(cache_dir, exist_ok=True)
-            tmp_zip = os.path.join(cache_dir, "release.zip")
-            with open(tmp_zip, "wb") as f:
-                f.write(zip_data)
-
-            targets = {
-                "pi_recorder.py": "pi_recorder/pi_recorder.py",
-                "setup_pi.sh": "pi_recorder/setup_pi.sh",
-                "requirements.txt": "pi_recorder/requirements.txt",
-                "howto.txt": "pi_recorder/howto.txt",
-            }
-
-            with zipfile.ZipFile(tmp_zip) as zf:
-                for local_name, repo_suffix in targets.items():
-                    for entry in zf.namelist():
-                        if entry.endswith(repo_suffix):
-                            data = zf.read(entry)
-                            out_path = os.path.join(cache_dir, local_name)
-                            with open(out_path, "wb") as out:
-                                out.write(data)
-                            result[local_name] = out_path
-                            break
-
-            with open(os.path.join(cache_dir, "release_tag.txt"), "w") as f:
-                f.write(tag)
-
-            try:
-                os.remove(tmp_zip)
-            except OSError:
-                pass
-
-            self._set_status(f"Release {tag}: {len(result)} Dateien geladen und gecacht")
-
-        except Exception as e:
-            self._set_status(f"Kein Cache und kein Internet! ({e})")
-
-        return result
+        raise RuntimeError(
+            "Keine Firmware verfuegbar!\n\n"
+            "Kein Internet und kein lokaler Cache vorhanden.\n"
+            "Bitte mit dem Internet verbinden und erneut versuchen,\n"
+            "oder zuerst PrezioHub mit Internet starten.")
 
 # ============================================================
 # Admin check & entry point

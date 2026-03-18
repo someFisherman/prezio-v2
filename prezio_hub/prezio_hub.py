@@ -5,6 +5,7 @@ Soleco AG
 
 import json
 import os
+import re
 import subprocess
 import sys
 import shutil
@@ -28,8 +29,8 @@ except ImportError:
 # Config
 # ============================================================
 VERSION     = "1.1.0"
-GITHUB_REPO = "someFisherman/prezio-v2"
-GITHUB_API  = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+GITHUB_RAW  = "https://raw.githubusercontent.com/someFisherman/prezio-v2/main/pi_recorder"
+GITHUB_FW_FILES = ["pi_recorder.py", "setup_pi.sh", "requirements.txt", "howto.txt"]
 
 PI_IP       = "192.168.4.1"
 PI_PORT     = 8080
@@ -182,74 +183,43 @@ def _ssh_exec(cmd, timeout=15):
     finally:
         client.close()
 
-def _github_latest_release(timeout=10):
-    """Fetch latest release info from GitHub. Returns dict or None."""
-    try:
-        req = Request(GITHUB_API, headers={
-            "User-Agent": "PrezioHub/1.0",
-            "Accept": "application/vnd.github+json",
-        })
-        with urlopen(req, timeout=timeout) as resp:
-            return json.loads(resp.read().decode())
-    except Exception:
-        return None
-
 def _parse_version(tag):
     """Parse 'v1.2.3' or '1.2.3' into tuple (1,2,3)."""
-    tag = tag.lstrip("v").strip()
+    tag = str(tag).lstrip("v").strip()
     parts = tag.split(".")
     return tuple(int(p) for p in parts if p.isdigit())
 
-def _cache_firmware(release):
-    """Download pi_recorder files from a GitHub release into local cache."""
-    if not release:
-        return False
-    tag = release.get("tag_name", "")
-    cached_tag_file = os.path.join(FIRMWARE_CACHE, "release_tag.txt")
-    if os.path.exists(cached_tag_file):
-        with open(cached_tag_file, "r") as f:
-            if f.read().strip() == tag:
-                return True
+def _read_version_from_py(text):
+    """Extract VERSION = '...' from Python source text."""
+    m = re.search(r'VERSION\s*=\s*["\']([^"\']+)["\']', text)
+    return m.group(1) if m else None
 
+def _cache_firmware():
+    """Download pi_recorder firmware files from GitHub main branch."""
+    os.makedirs(FIRMWARE_CACHE, exist_ok=True)
+    ok = True
+    for fname in GITHUB_FW_FILES:
+        url = f"{GITHUB_RAW}/{fname}"
+        try:
+            req = Request(url, headers={"User-Agent": "PrezioHub/1.0"})
+            with urlopen(req, timeout=15) as resp:
+                data = resp.read()
+            with open(os.path.join(FIRMWARE_CACHE, fname), "wb") as f:
+                f.write(data)
+        except Exception:
+            ok = False
+    return ok
+
+def _get_cached_firmware_version():
+    """Read VERSION from cached pi_recorder.py, or None."""
+    path = os.path.join(FIRMWARE_CACHE, "pi_recorder.py")
+    if not os.path.exists(path):
+        return None
     try:
-        zip_url = f"https://github.com/{GITHUB_REPO}/archive/refs/tags/{tag}.zip"
-        req = Request(zip_url, headers={"User-Agent": "PrezioHub/1.0"})
-        with urlopen(req, timeout=30) as resp:
-            zip_data = resp.read()
+        with open(path, "r", encoding="utf-8") as f:
+            return _read_version_from_py(f.read())
     except Exception:
-        return False
-
-    import tempfile as _tf
-    tmp_dir = _tf.mkdtemp(prefix="prezio_fw_cache_")
-    try:
-        zip_path = os.path.join(tmp_dir, "release.zip")
-        with open(zip_path, "wb") as f:
-            f.write(zip_data)
-
-        targets = {
-            "pi_recorder.py": "pi_recorder/pi_recorder.py",
-            "setup_pi.sh": "pi_recorder/setup_pi.sh",
-            "requirements.txt": "pi_recorder/requirements.txt",
-            "howto.txt": "pi_recorder/howto.txt",
-        }
-
-        os.makedirs(FIRMWARE_CACHE, exist_ok=True)
-        with zipfile.ZipFile(zip_path) as zf:
-            for local_name, repo_suffix in targets.items():
-                for entry in zf.namelist():
-                    if entry.endswith(repo_suffix):
-                        data = zf.read(entry)
-                        with open(os.path.join(FIRMWARE_CACHE, local_name), "wb") as out:
-                            out.write(data)
-                        break
-
-        with open(cached_tag_file, "w") as f:
-            f.write(tag)
-        return True
-    except Exception:
-        return False
-    finally:
-        shutil.rmtree(tmp_dir, ignore_errors=True)
+        return None
 
 def _sftp_upload(local_path, remote_path):
     """Upload a file to the Pi via SFTP. Returns (success, message)."""
@@ -294,15 +264,14 @@ class PrezioHub(tk.Tk):
 
         self._tool_procs = {}
         self._auto_refresh = True
-        self._hub_update_release = None
+        self._cached_fw_version = None
 
         self._build_header()
-        self._build_update_banner()
         self._build_tabs()
         self._schedule_refresh()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
-        threading.Thread(target=self._check_hub_update, daemon=True).start()
+        threading.Thread(target=self._startup_cache_firmware, daemon=True).start()
 
     # ---- Header ----
     def _build_header(self):
@@ -320,107 +289,27 @@ class PrezioHub(tk.Tk):
         tk.Label(right, text="Zentrale Steuerung", font=("Segoe UI", 9),
                  bg=COL_HDR_BG, fg="#FFE0B2").pack(anchor="e")
 
-    # ---- Update Banner ----
-    def _build_update_banner(self):
-        self.update_banner = tk.Frame(self, bg="#1B5E20", height=0)
-        self.update_banner.pack_propagate(False)
-        inner = tk.Frame(self.update_banner, bg="#1B5E20")
-        inner.pack(fill="both", expand=True, padx=16)
-        self.update_label = tk.Label(inner, text="", font=("Segoe UI", 10, "bold"),
-                                     bg="#1B5E20", fg="#FFFFFF", anchor="w")
-        self.update_label.pack(side="left", fill="x", expand=True)
-        self.update_dl_btn = tk.Button(inner, text="Jetzt herunterladen",
-                                       font=("Segoe UI", 9, "bold"),
-                                       bg="#43A047", fg="#FFFFFF", bd=0,
-                                       activebackground="#388E3C",
-                                       activeforeground="#FFFFFF",
-                                       cursor="hand2",
-                                       command=self._hub_download_update)
-        self.update_dismiss_btn = tk.Button(inner, text="X",
-                                            font=("Segoe UI", 9, "bold"),
-                                            bg="#1B5E20", fg="#FFFFFF", bd=0,
-                                            activebackground="#2E7D32",
-                                            cursor="hand2", width=3,
-                                            command=self._hub_dismiss_banner)
+    # ---- Firmware-Cache beim Start aktualisieren ----
+    def _startup_cache_firmware(self):
+        """Background thread: pull latest firmware files from GitHub main."""
+        ok = _cache_firmware()
+        ver = _get_cached_firmware_version()
+        if ver:
+            self.after(0, lambda: setattr(self, '_cached_fw_version', ver))
+        if not ok:
+            has_cache = ver is not None
+            if has_cache:
+                self.after(0, lambda: self._show_inet_banner(
+                    "Kein Internet - Firmware-Cache nicht aktualisiert. Alte Version wird verwendet."))
+            else:
+                self.after(0, lambda: self._show_inet_banner(
+                    "Kein Internet und kein Firmware-Cache! Bitte Hub mit Internet starten."))
 
-    def _show_update_banner(self, tag, body=""):
-        short = body.split("\n")[0][:80] if body else ""
-        self.update_label.config(
-            text=f"Update verfuegbar: {tag}  {('- ' + short) if short else ''}")
-        self.update_dl_btn.pack(side="right", padx=(8, 0))
-        self.update_dismiss_btn.pack(side="right", padx=(4, 0))
-        self.update_banner.config(height=38)
-        self.update_banner.pack(fill="x", after=self.winfo_children()[0])
-
-    def _hub_dismiss_banner(self):
-        self.update_banner.pack_forget()
-        self.update_banner.config(height=0)
-
-    def _check_hub_update(self):
-        release = _github_latest_release()
-        if not release:
-            return
-        _cache_firmware(release)
-        gh_tag = release.get("tag_name", "")
-        gh_ver = _parse_version(gh_tag)
-        my_ver = _parse_version(VERSION)
-        if gh_ver > my_ver:
-            self._hub_update_release = release
-            body = release.get("body", "")
-            self.after(0, lambda: self._show_update_banner(gh_tag, body))
-
-    def _hub_download_update(self):
-        if not self._hub_update_release:
-            return
-        assets = self._hub_update_release.get("assets", [])
-        setup_url = None
-        setup_name = None
-        for a in assets:
-            name = a.get("name", "")
-            if name.lower().endswith(".exe") and "setup" in name.lower():
-                setup_url = a.get("browser_download_url")
-                setup_name = name
-                break
-        if not setup_url:
-            messagebox.showinfo("Kein Installer",
-                "Im Release wurde kein Setup-EXE gefunden.\n"
-                "Bitte manuell von GitHub herunterladen:\n"
-                f"https://github.com/{GITHUB_REPO}/releases/latest")
-            return
-
-        save_path = filedialog.asksaveasfilename(
-            title="Installer speichern unter...",
-            initialfile=setup_name,
-            defaultextension=".exe",
-            filetypes=[("Installer", "*.exe"), ("Alle Dateien", "*.*")])
-        if not save_path:
-            return
-
-        self.update_dl_btn.config(text="Wird heruntergeladen...", state="disabled")
-        def _do():
-            try:
-                req = Request(setup_url, headers={"User-Agent": "PrezioHub/1.0"})
-                with urlopen(req, timeout=120) as resp:
-                    data = resp.read()
-                with open(save_path, "wb") as f:
-                    f.write(data)
-                self.after(0, lambda: self._hub_download_done(save_path))
-            except Exception as e:
-                self.after(0, lambda: self._hub_download_error(str(e)))
-        threading.Thread(target=_do, daemon=True).start()
-
-    def _hub_download_done(self, path):
-        self.update_dl_btn.config(text="Jetzt herunterladen", state="normal")
-        self._hub_dismiss_banner()
-        if messagebox.askyesno("Download abgeschlossen",
-                f"Installer heruntergeladen:\n{path}\n\n"
-                "Installer jetzt starten und PrezioHub schliessen?"):
-            os.startfile(path)
-            self.destroy()
-
-    def _hub_download_error(self, err):
-        self.update_dl_btn.config(text="Jetzt herunterladen", state="normal")
-        messagebox.showerror("Download-Fehler", f"Fehler beim Herunterladen:\n{err}")
+    def _show_inet_banner(self, text):
+        self.dash_inet_label.config(text=text)
+        self.dash_inet_banner.config(height=40)
+        if not self.dash_inet_banner.winfo_ismapped():
+            self.dash_inet_banner.pack(fill="x", pady=(8, 0))
 
     # ---- Tabs ----
     def _build_tabs(self):
@@ -522,6 +411,30 @@ class PrezioHub(tk.Tk):
             val_label.pack(side="left", fill="x", expand=True)
             setattr(self, f"{ind_name}_val", val_label)
 
+        self.dash_inet_banner = tk.Frame(p, bg=COL_ERROR, height=0)
+        self.dash_inet_banner.pack_propagate(False)
+        ib = tk.Frame(self.dash_inet_banner, bg=COL_ERROR)
+        ib.pack(fill="both", expand=True, padx=12)
+        self.dash_inet_label = tk.Label(ib, text="", font=("Segoe UI", 10, "bold"),
+                                        bg=COL_ERROR, fg="#FFFFFF", anchor="w")
+        self.dash_inet_label.pack(side="left", fill="x", expand=True)
+
+        self.dash_fw_banner = tk.Frame(p, bg=COL_WARN, height=0)
+        self.dash_fw_banner.pack_propagate(False)
+        binner = tk.Frame(self.dash_fw_banner, bg=COL_WARN)
+        binner.pack(fill="both", expand=True, padx=12)
+        self.dash_fw_label = tk.Label(binner, text="", font=("Segoe UI", 10, "bold"),
+                                      bg=COL_WARN, fg="#FFFFFF", anchor="w")
+        self.dash_fw_label.pack(side="left", fill="x", expand=True)
+        self.dash_fw_btn = tk.Button(binner, text="Zur Pi-Steuerung",
+                                     font=("Segoe UI", 9, "bold"),
+                                     bg="#E65100", fg="#FFFFFF", bd=0,
+                                     activebackground="#BF360C",
+                                     activeforeground="#FFFFFF",
+                                     cursor="hand2",
+                                     command=lambda: self.notebook.select(self.tab_pi))
+        self.dash_fw_btn.pack(side="right", padx=(8, 4), pady=4)
+
         self._section(p, "LETZTE MESSWERTE", top=14)
         card2 = self._card(p)
         card2.pack(fill="x")
@@ -570,6 +483,7 @@ class PrezioHub(tk.Tk):
             self.dash_tob1.config(text="--")
             self.dash_details.config(text=f"Pi nicht erreichbar unter {PI_BASE}\n"
                                           f"WiFi '{WIFI_SSID}' verbunden?")
+            self._hide_fw_banner()
             return
 
         self._set_indicator("dash_pi", COL_SUCCESS)
@@ -599,8 +513,7 @@ class PrezioHub(tk.Tk):
         self.dash_tob1.config(text=f"{tob1:.2f}" if tob1 is not None else "--")
 
         pi_ver = health.get("version", "")
-        if pi_ver and not getattr(self, '_fw_checked', False):
-            self._fw_checked = True
+        if pi_ver:
             threading.Thread(target=self._auto_fw_check, args=(pi_ver,), daemon=True).start()
 
         details = []
@@ -729,131 +642,114 @@ class PrezioHub(tk.Tk):
         threading.Thread(target=_do, daemon=True).start()
 
     # ---- Firmware Update ----
-    _fw_release = None
-
     def _fw_check(self):
-        self.fw_status.config(text="Pruefe Pi-Version und GitHub...", fg=COL_TEXT_SEC)
+        """Compare Pi version with cached firmware from GitHub main."""
+        self.fw_status.config(text="Pruefe Versionen...", fg=COL_TEXT_SEC)
         self.fw_update_btn.pack_forget()
         def _do():
             health = _api_get("/health")
-            release = _github_latest_release()
-            self.after(0, lambda: self._fw_check_result(health, release))
+            self.after(0, lambda: self._fw_check_result(health))
         threading.Thread(target=_do, daemon=True).start()
 
-    def _fw_check_result(self, health, release):
+    def _fw_check_result(self, health):
         if health is None:
             self.fw_status.config(
                 text="Pi nicht erreichbar - mit WiFi 'Prezio-Recorder' verbinden.",
                 fg=COL_ERROR)
             return
         pi_ver = health.get("version", "unbekannt")
+        cached_ver = _get_cached_firmware_version()
 
-        if release is None:
+        if cached_ver is None:
             self.fw_status.config(
                 text=f"Pi-Version: {pi_ver}\n"
-                     f"GitHub nicht erreichbar (kein Internet?).",
+                     f"Kein Cache vorhanden. Hub mit Internet starten.",
                 fg=COL_WARN)
             return
 
-        gh_tag = release.get("tag_name", "")
-        gh_ver = gh_tag.lstrip("v")
-        changelog = release.get("body", "")[:200]
-
         pi_tuple = _parse_version(pi_ver)
-        gh_tuple = _parse_version(gh_ver)
+        cached_tuple = _parse_version(cached_ver)
 
-        if gh_tuple > pi_tuple:
-            self._fw_release = release
+        if cached_tuple > pi_tuple:
             self.fw_status.config(
                 text=f"Update verfuegbar!\n"
-                     f"Pi: v{pi_ver}  ->  GitHub: {gh_tag}\n"
-                     f"{changelog}",
+                     f"Pi: v{pi_ver}  ->  Cache: v{cached_ver}",
                 fg=COL_SUCCESS)
             self.fw_update_btn.pack(side="left", padx=(8, 0))
         else:
             self.fw_status.config(
-                text=f"Pi ist aktuell (v{pi_ver}).\n"
-                     f"Neueste Version auf GitHub: {gh_tag}",
+                text=f"Pi ist aktuell (v{pi_ver}).",
                 fg=COL_TEXT_SEC)
 
     def _fw_apply(self):
-        if not self._fw_release:
+        cached = os.path.join(FIRMWARE_CACHE, "pi_recorder.py")
+        if not os.path.exists(cached):
+            messagebox.showerror("Fehler",
+                "Keine gecachte Firmware vorhanden.\n"
+                "Bitte PrezioHub einmal mit Internet starten.")
             return
         if not messagebox.askokcancel("Pi-Firmware updaten",
                 "Die neue pi_recorder.py wird auf den Pi hochgeladen\n"
                 "und der Service wird neugestartet.\n\nFortfahren?"):
             return
-        self.fw_status.config(text="Lade Update von GitHub...", fg=COL_TEXT_SEC)
+        self.fw_status.config(text="Lade Firmware auf Pi...", fg=COL_TEXT_SEC)
         self.fw_update_btn.pack_forget()
-        release = self._fw_release
         def _do():
-            result = self._fw_download_and_apply(release)
+            result = self._fw_upload_cached()
             self.after(0, lambda: self._fw_apply_result(result))
         threading.Thread(target=_do, daemon=True).start()
 
-    def _fw_download_and_apply(self, release):
-        tag = release.get("tag_name", "")
-        cached = os.path.join(FIRMWARE_CACHE, "pi_recorder.py")
-        cached_tag_file = os.path.join(FIRMWARE_CACHE, "release_tag.txt")
-
-        if os.path.exists(cached):
-            cached_tag = ""
-            if os.path.exists(cached_tag_file):
-                with open(cached_tag_file, "r") as f:
-                    cached_tag = f.read().strip()
-            if cached_tag == tag:
-                local_file = cached
-            else:
-                if not _cache_firmware(release):
-                    return False, "Firmware-Download fehlgeschlagen.\nBitte PrezioHub mit Internet starten um den Cache zu aktualisieren."
-                local_file = cached
-        else:
-            if not _cache_firmware(release):
-                return False, "Keine gecachte Firmware vorhanden und kein Internet.\nBitte PrezioHub einmal mit Internet starten."
-            local_file = cached
-
-        try:
-            remote_path = "/home/pi/prezio-v2/pi_recorder/pi_recorder.py"
-            ok, msg = _sftp_upload(local_file, remote_path)
-            if not ok:
-                return False, f"Upload fehlgeschlagen: {msg}"
-
-            out, err = _ssh_exec("sudo systemctl restart prezio-recorder")
-            if err and "fehlgeschlagen" in err.lower():
-                return False, f"Service-Restart fehlgeschlagen: {err}"
-
-            return True, f"Update auf {tag} erfolgreich!"
-        except Exception as e:
-            return False, f"Fehler: {e}"
-        finally:
-            shutil.rmtree(tmp_dir, ignore_errors=True)
+    def _fw_upload_cached(self):
+        """Upload cached pi_recorder.py to Pi via SFTP and restart service."""
+        local_file = os.path.join(FIRMWARE_CACHE, "pi_recorder.py")
+        remote_path = "/home/pi/prezio-v2/pi_recorder/pi_recorder.py"
+        ok, msg = _sftp_upload(local_file, remote_path)
+        if not ok:
+            return False, f"Upload fehlgeschlagen: {msg}"
+        out, err = _ssh_exec("sudo systemctl restart prezio-recorder")
+        if err and "fehlgeschlagen" in err.lower():
+            return False, f"Service-Restart fehlgeschlagen: {err}"
+        ver = _get_cached_firmware_version() or "?"
+        return True, f"Update auf v{ver} erfolgreich!"
 
     def _fw_apply_result(self, result):
         ok, msg = result
         if ok:
             self.fw_status.config(text=msg, fg=COL_SUCCESS)
-            self._fw_release = None
         else:
             self.fw_status.config(text=msg, fg=COL_ERROR)
             self.fw_update_btn.pack(side="left", padx=(8, 0))
 
     def _auto_fw_check(self, pi_ver):
-        """Background check: compare Pi version with GitHub, update firmware status."""
-        release = _github_latest_release()
-        if not release:
+        """Auto-check: compare Pi version with cached firmware version."""
+        cached_ver = _get_cached_firmware_version()
+        if not cached_ver:
+            self.after(0, self._hide_fw_banner)
             return
-        gh_tag = release.get("tag_name", "")
-        gh_tuple = _parse_version(gh_tag)
         pi_tuple = _parse_version(pi_ver)
-        if gh_tuple > pi_tuple:
-            self._fw_release = release
+        cached_tuple = _parse_version(cached_ver)
+        if cached_tuple > pi_tuple:
             def _show():
                 self.fw_status.config(
-                    text=f"Pi-Firmware veraltet! Pi: v{pi_ver} -> GitHub: {gh_tag}\n"
+                    text=f"Pi-Firmware veraltet! Pi: v{pi_ver} -> Cache: v{cached_ver}\n"
                          f"Wechsle zu 'Pi-Steuerung' um zu updaten.",
                     fg=COL_WARN)
                 self.fw_update_btn.pack(side="left", padx=(8, 0))
+                self._show_fw_banner(pi_ver, cached_ver)
             self.after(0, _show)
+        else:
+            self.after(0, self._hide_fw_banner)
+
+    def _show_fw_banner(self, pi_ver, cached_ver):
+        self.dash_fw_label.config(
+            text=f"UPDATE FAELLIG:  Pi v{pi_ver}  \u2192  v{cached_ver}")
+        self.dash_fw_banner.config(height=40)
+        if not self.dash_fw_banner.winfo_ismapped():
+            self.dash_fw_banner.pack(fill="x", pady=(8, 0))
+
+    def _hide_fw_banner(self):
+        if self.dash_fw_banner.winfo_ismapped():
+            self.dash_fw_banner.pack_forget()
 
     # ============================================================
     # Tab 3: Recording & Dateien

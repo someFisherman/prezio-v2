@@ -76,6 +76,30 @@ fi
 # ------ WiFi Access Point via NetworkManager ------
 echo "[3/5] Configuring WiFi Access Point (NetworkManager)..."
 
+echo "  Waiting for NetworkManager..."
+for i in $(seq 1 30); do
+    if nmcli general status >/dev/null 2>&1; then
+        echo "  NetworkManager ready (after ${i}s)"
+        break
+    fi
+    sleep 1
+done
+
+if ! nmcli general status >/dev/null 2>&1; then
+    echo "  ERROR: NetworkManager not available after 30s, trying to start..."
+    systemctl start NetworkManager 2>/dev/null || true
+    sleep 5
+fi
+
+echo "  Waiting for wlan0..."
+for i in $(seq 1 20); do
+    if nmcli device status 2>/dev/null | grep -q "wlan0"; then
+        echo "  wlan0 ready (after ${i}s)"
+        break
+    fi
+    sleep 1
+done
+
 nmcli connection delete prezio-ap 2>/dev/null || true
 
 for conn in $(nmcli -t -f NAME,DEVICE connection show | grep ":wlan0" | cut -d: -f1); do
