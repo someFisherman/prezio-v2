@@ -249,7 +249,7 @@ set +e
 LOG=/var/log/prezio-firstboot.log
 exec > >(tee -a "$LOG") 2>&1
 
-echo "==== Prezio First Boot - $(date) ===="
+echo "==== Prezio First Boot Phase 1 - $(date) ===="
 
 FIRSTUSER=$(getent passwd 1000 | cut -d: -f1)
 if [ -z "$FIRSTUSER" ]; then
@@ -261,18 +261,6 @@ echo "{PI_HOSTNAME}" > /etc/hostname
 sed -i "s/127.0.1.1.*/127.0.1.1\\t{PI_HOSTNAME}/" /etc/hosts
 
 systemctl enable ssh
-systemctl start ssh
-
-echo "Waiting for NetworkManager to be ready..."
-for i in $(seq 1 60); do
-    if systemctl is-active --quiet NetworkManager 2>/dev/null; then
-        echo "NetworkManager ready after ${{i}}s"
-        break
-    fi
-    sleep 1
-done
-
-sleep 3
 
 SRC=/boot/firmware/prezio_setup
 DST=/home/{PI_USER}/prezio-v2/pi_recorder
@@ -284,15 +272,32 @@ cp $SRC/howto.txt $DST/ 2>/dev/null
 cp $SRC/pyserial-*.whl $DST/ 2>/dev/null
 chown -R {PI_USER}:{PI_USER} /home/{PI_USER}/prezio-v2
 
-cd $DST
-bash setup_pi.sh
+echo "Creating prezio-setup service for Phase 2 (after reboot)..."
+cat > /etc/systemd/system/prezio-setup.service << SVCEOF
+[Unit]
+Description=Prezio Setup Phase 2
+After=NetworkManager.service network-online.target
+Wants=NetworkManager.service network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash -c 'sleep 10 && bash /home/{PI_USER}/prezio-v2/pi_recorder/setup_pi.sh >> /var/log/prezio-firstboot.log 2>&1 && systemctl disable prezio-setup.service && rm -f /etc/systemd/system/prezio-setup.service && systemctl daemon-reload'
+RemainAfterExit=yes
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target
+SVCEOF
+
+systemctl daemon-reload
+systemctl enable prezio-setup.service
 
 rm -rf /boot/firmware/prezio_setup
 rm -f /boot/firmware/firstrun.sh
 sed -i 's| systemd.run.*||g' /boot/firmware/cmdline.txt
 
-echo "==== Prezio First Boot COMPLETE ===="
-exit 0
+echo "==== Phase 1 COMPLETE - rebooting for Phase 2 ===="
+reboot
 """
 
 # ============================================================
